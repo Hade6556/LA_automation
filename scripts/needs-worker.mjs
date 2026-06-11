@@ -14,15 +14,14 @@
 //
 // Optional env: LINKEDIN_CLI_SESSION (default 'la'), OPENOUTREACH_DIR
 // (default ~/OpenOutreach), NEEDS_SCAN_LIMIT (profiles per scan, default 25).
+//
+// NOTE: legacy fallback. Campaigns started from the app spawn
+// campaign-pipeline.mjs per need — don't run this worker alongside the app,
+// or both may scan the same need over the single LinkedIn session.
 
-import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
-import { mapProfile } from "./_profile-mapping.mjs";
+import { scanNeed } from "./_scan.mjs";
 
-const OPENOUTREACH = process.env.OPENOUTREACH_DIR || `${process.env.HOME}/OpenOutreach`;
-const PYTHON = `${OPENOUTREACH}/.venv/bin/python`;
-const MANAGE = `${OPENOUTREACH}/manage.py`;
-const SESSION = process.env.LINKEDIN_CLI_SESSION || "la";
 const LIMIT = Number(process.env.NEEDS_SCAN_LIMIT || 25);
 const ONCE = process.argv.includes("--once");
 const INTERVAL_MS = 10_000;
@@ -35,42 +34,12 @@ if (!url || !key) {
 }
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 
-function searchScan(filters) {
-  // OpenOutreach prints the JSON envelope to stdout; its progress logs pass
-  // through to our stderr so the operator sees the scan happen live.
-  const out = execFileSync(
-    PYTHON,
-    [MANAGE, "search_scan", "--filters-json", JSON.stringify(filters),
-     "--session", SESSION, "--limit", String(LIMIT)],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "inherit"] },
-  );
-  return JSON.parse(out);
-}
-
 async function runNeed(need) {
   console.error(`\n▶ scan "${need.label}" (need ${need.id})`);
   await supabase.from("needs").update({ status: "scanning" }).eq("id", need.id);
 
   try {
-    const result = searchScan(need.filters);
-    const rows = result.profiles
-      .map(({ profile, raw }) => ({
-        ...mapProfile(profile, raw),
-        need_id: need.id,
-        source: "needs_worker",
-        provenance: { via: "needs_worker", need_id: need.id, scraped_at: new Date().toISOString() },
-      }))
-      .filter((r) => r.linkedin_url);
-
-    let inserted = 0;
-    if (rows.length > 0) {
-      const { data, error } = await supabase
-        .from("candidates")
-        .upsert(rows, { onConflict: "linkedin_url", ignoreDuplicates: true })
-        .select("id");
-      if (error) throw new Error(`candidates upsert failed: ${error.message}`);
-      inserted = data?.length ?? 0;
-    }
+    const { scraped, inserted } = await scanNeed(supabase, need, { limit: LIMIT });
 
     await supabase.from("needs").update({
       status: "done",
@@ -78,7 +47,7 @@ async function runNeed(need) {
       scanned_at: new Date().toISOString(),
       error: null,
     }).eq("id", need.id);
-    console.error(`✓ "${need.label}": ${rows.length} scraped, ${inserted} new candidates (duplicates skipped)`);
+    console.error(`✓ "${need.label}": ${scraped} scraped, ${inserted} new candidates (duplicates skipped)`);
   } catch (e) {
     const message = String(e.message || e).slice(0, 500);
     await supabase.from("needs").update({ status: "error", error: message }).eq("id", need.id);
@@ -100,8 +69,15 @@ async function pass() {
   return queued?.length ?? 0;
 }
 
-// Recover needs stuck in 'scanning' from a previous crashed worker run.
-await supabase.from("needs").update({ status: "queued" }).eq("status", "scanning");
+// Recover needs stuck in 'scanning' from a previous crashed run — but only
+// stale ones (no recent heartbeat), so we never steal a need from a live
+// campaign-pipeline process.
+const staleBefore = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+await supabase
+  .from("needs")
+  .update({ status: "queued" })
+  .eq("status", "scanning")
+  .or(`heartbeat_at.is.null,heartbeat_at.lt.${staleBefore}`);
 
 if (ONCE) {
   const n = await pass();

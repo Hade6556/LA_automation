@@ -1,6 +1,7 @@
 // Rank candidates with Claude Opus 4.8 against the active ranking rubric.
-//   node --env-file=.env.local scripts/rank.mjs          # ranks status='sourced' → 'ranked'
-//   node --env-file=.env.local scripts/rank.mjs --all    # re-ranks every candidate
+//   node --env-file=.env.local scripts/rank.mjs                   # ranks status='sourced' → 'ranked'
+//   node --env-file=.env.local scripts/rank.mjs --all             # re-ranks every candidate
+//   node --env-file=.env.local scripts/rank.mjs --need-id <uuid>  # only that campaign's people
 //
 // Sets rank_score (0-100) + rank_reason, and advances sourced → ranked.
 // The rubric is sent as a cached system prompt (reused across candidates).
@@ -22,6 +23,8 @@ const supabase = createClient(url, key, { auth: { persistSession: false } });
 const anthropic = new Anthropic();
 
 const rankAll = process.argv.includes("--all");
+const needIdIdx = process.argv.indexOf("--need-id");
+const needId = needIdIdx === -1 ? null : process.argv[needIdIdx + 1];
 
 const { data: rubrics, error: rErr } = await supabase
   .from("rubrics")
@@ -35,6 +38,7 @@ if (!rubric) { console.error("No active ranking rubric found."); process.exit(1)
 
 let q = supabase.from("candidates").select("*");
 if (!rankAll) q = q.eq("status", "sourced");
+if (needId) q = q.eq("need_id", needId);
 const { data: cands, error: cErr } = await q;
 if (cErr) { console.error(cErr.message); process.exit(1); }
 if (!cands?.length) { console.error("No candidates to rank."); process.exit(0); }

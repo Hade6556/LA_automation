@@ -3,6 +3,7 @@
 //   node --env-file=.env.local scripts/research-rank.mjs --top 5
 //   node --env-file=.env.local scripts/research-rank.mjs --ids <uuid>,<uuid>
 //   node --env-file=.env.local scripts/research-rank.mjs --min-score 70
+//   node --env-file=.env.local scripts/research-rank.mjs --need-id <uuid> --top 5   # campaign-scoped
 //
 // For each shortlisted candidate: Opus researches them on the web (web_search +
 // web_fetch), then returns a structured dossier + per-signal sub-scores + overall
@@ -40,10 +41,12 @@ const force = argv.includes("--force"); // re-research even already-done people
 const top = Number(flag("--top") ?? (flag("--ids") || flag("--min-score") ? 0 : 10));
 const ids = (flag("--ids") || "").split(",").map((s) => s.trim()).filter(Boolean);
 const minScore = flag("--min-score") ? Number(flag("--min-score")) : null;
+const needId = flag("--need-id") || null; // scope to one campaign's candidates
 
 let query = supabase.from("candidates").select("*").order("rank_score", { ascending: false, nullsFirst: false });
 // Skip people who already have a dossier, unless explicitly forced or targeted by --ids.
 if (!force && !ids.length) query = query.is("researched_at", null);
+if (needId) query = query.eq("need_id", needId);
 if (ids.length) query = query.in("id", ids);
 else if (minScore != null) query = query.gte("rank_score", minScore);
 else if (top) query = query.limit(top);
