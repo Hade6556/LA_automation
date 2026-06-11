@@ -76,11 +76,14 @@ export async function scanNeed(supabase, need, { limit = 25, stream = false, via
     );
   });
 
+  // Subscribe before awaiting the child: readline may close first, and a
+  // listener attached after the fact would wait forever.
+  const rlClosed = new Promise((resolve) => rl.once("close", resolve));
   const code = await new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("close", resolve);
   });
-  await new Promise((r) => rl.once("close", r));
+  await rlClosed;
   await Promise.all(pending);
 
   if (upsertError) throw upsertError;

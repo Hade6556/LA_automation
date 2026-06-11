@@ -5,6 +5,9 @@
 //
 //   node --env-file=.env.local scripts/campaign-pipeline.mjs --need-id <uuid>
 //
+// --skip-scan resumes from the ranking phase (e.g. after a failure when the
+// scan itself already upserted everyone) without re-scraping LinkedIn.
+//
 // Spawned detached by the app when a campaign starts (src/lib/pipeline/spawn.ts),
 // so it survives Next dev-server restarts; also runnable by hand. Heartbeats
 // needs.heartbeat_at every 30s so the UI can detect a dead pipeline. Waits for
@@ -31,6 +34,7 @@ const SCAN_WAIT_MAX_MS = 30 * 60 * 1000;
 
 const idIdx = process.argv.indexOf("--need-id");
 const needId = idIdx === -1 ? null : process.argv[idIdx + 1];
+const skipScan = process.argv.includes("--skip-scan");
 if (!needId) {
   console.error("Usage: campaign-pipeline.mjs --need-id <uuid>");
   process.exit(1);
@@ -105,15 +109,19 @@ const heartbeat = setInterval(() => {
 try {
   await setNeed({ heartbeat_at: new Date().toISOString(), started_at: new Date().toISOString(), error: null });
 
-  await waitForScanSlot();
-  await setNeed({ status: "scanning" });
-  const { scraped, inserted } = await scanNeed(supabase, need, {
-    limit: LIMIT,
-    stream: true,
-    via: "campaign_pipeline",
-  });
-  await setNeed({ found_count: inserted, scanned_at: new Date().toISOString() });
-  console.error(`✓ scan: ${scraped} scraped, ${inserted} new (duplicates skipped)`);
+  if (skipScan) {
+    console.error("… scan skipped (--skip-scan)");
+  } else {
+    await waitForScanSlot();
+    await setNeed({ status: "scanning" });
+    const { scraped, inserted } = await scanNeed(supabase, need, {
+      limit: LIMIT,
+      stream: true,
+      via: "campaign_pipeline",
+    });
+    await setNeed({ found_count: inserted, scanned_at: new Date().toISOString() });
+    console.error(`✓ scan: ${scraped} scraped, ${inserted} new (duplicates skipped)`);
+  }
 
   await setNeed({ status: "ranking" });
   await runNode("rank.mjs", ["--need-id", needId]);
