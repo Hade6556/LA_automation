@@ -17,6 +17,29 @@ export async function getCandidates(status?: string): Promise<Candidate[]> {
   return (data ?? []) as Candidate[];
 }
 
+// One campaign's people — best score first, then arrival order so freshly
+// scraped (unranked) candidates append at the bottom as they stream in.
+export async function getCandidatesByNeed(needId: string): Promise<Candidate[]> {
+  const { data, error } = await supabaseAdmin()
+    .from("candidates")
+    .select("*")
+    .eq("need_id", needId)
+    .order("rank_score", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`getCandidatesByNeed failed: ${error.message}`);
+  return (data ?? []) as Candidate[];
+}
+
+// Instant UI feedback for the Research button — the research script sets and
+// clears this flag itself, but only once its process has spun up.
+export async function markResearching(id: string): Promise<void> {
+  const { error } = await supabaseAdmin()
+    .from("candidates")
+    .update({ researching: true })
+    .eq("id", id);
+  if (error) throw new Error(`markResearching failed: ${error.message}`);
+}
+
 export async function getCandidate(id: string): Promise<Candidate | null> {
   const { data, error } = await supabaseAdmin()
     .from("candidates")

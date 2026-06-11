@@ -14,47 +14,94 @@ export function labelForFilters(f: SearchFilters): string {
   return bits.join(" ") || "(empty filter)";
 }
 
-// Needs newest-first, each with a live count of candidates it discovered.
-export async function getNeeds(): Promise<(Need & { live_found: number })[]> {
+// Live pipeline progress for one campaign, computed from its candidates.
+export interface CampaignCounts {
+  found: number;
+  ranked: number;
+  researched: number;
+  researching: number;
+}
+
+const EMPTY_COUNTS: CampaignCounts = { found: 0, ranked: 0, researched: 0, researching: 0 };
+const COUNT_COLS = "need_id, rank_score, researched_at, researching";
+
+type CountRow = {
+  need_id: string;
+  rank_score: number | null;
+  researched_at: string | null;
+  researching: boolean;
+};
+
+function tally(rows: CountRow[]): Record<string, CampaignCounts> {
+  const byNeed: Record<string, CampaignCounts> = {};
+  for (const r of rows) {
+    const c = (byNeed[r.need_id] ??= { ...EMPTY_COUNTS });
+    c.found++;
+    if (r.rank_score != null) c.ranked++;
+    if (r.researched_at != null) c.researched++;
+    if (r.researching) c.researching++;
+  }
+  return byNeed;
+}
+
+// Needs (campaigns) newest-first, each with live progress counts.
+export async function getNeeds(): Promise<(Need & { counts: CampaignCounts })[]> {
   const db = supabaseAdmin();
-  const [{ data: needs, error }, { data: counts, error: cErr }] = await Promise.all([
+  const [{ data: needs, error }, { data: rows, error: cErr }] = await Promise.all([
     db.from("needs").select("*").order("created_at", { ascending: false }),
-    db.from("candidates").select("need_id").not("need_id", "is", null),
+    db.from("candidates").select(COUNT_COLS).not("need_id", "is", null),
   ]);
   if (error) throw new Error(`getNeeds failed: ${error.message}`);
   if (cErr) throw new Error(`getNeeds counts failed: ${cErr.message}`);
 
-  const byNeed: Record<string, number> = {};
-  for (const row of counts ?? []) {
-    const id = (row as { need_id: string }).need_id;
-    byNeed[id] = (byNeed[id] ?? 0) + 1;
-  }
+  const byNeed = tally((rows ?? []) as CountRow[]);
   return ((needs ?? []) as Need[]).map((n) => ({
     ...n,
-    live_found: byNeed[n.id] ?? 0,
+    counts: byNeed[n.id] ?? EMPTY_COUNTS,
   }));
 }
 
-export async function createNeed(
+export async function getNeed(
+  id: string,
+): Promise<(Need & { counts: CampaignCounts }) | null> {
+  const db = supabaseAdmin();
+  const [{ data: need, error }, { data: rows, error: cErr }] = await Promise.all([
+    db.from("needs").select("*").eq("id", id).maybeSingle(),
+    db.from("candidates").select(COUNT_COLS).eq("need_id", id),
+  ]);
+  if (error) throw new Error(`getNeed failed: ${error.message}`);
+  if (cErr) throw new Error(`getNeed counts failed: ${cErr.message}`);
+  if (!need) return null;
+
+  const byNeed = tally((rows ?? []) as CountRow[]);
+  return { ...(need as Need), counts: byNeed[id] ?? EMPTY_COUNTS };
+}
+
+// A campaign is a need born 'queued' — the spawned pipeline takes it from there.
+export async function createCampaign(
   needText: string,
   filters: SearchFilters,
 ): Promise<Need> {
   const { data, error } = await supabaseAdmin()
     .from("needs")
-    .insert({ need_text: needText, label: labelForFilters(filters), filters })
+    .insert({
+      need_text: needText,
+      label: labelForFilters(filters),
+      filters,
+      status: "queued",
+    })
     .select("*")
     .single();
-  if (error) throw new Error(`createNeed failed: ${error.message}`);
+  if (error) throw new Error(`createCampaign failed: ${error.message}`);
   return data as Need;
 }
 
-export async function queueNeed(id: string): Promise<void> {
+export async function retryNeed(id: string): Promise<void> {
   const { error } = await supabaseAdmin()
     .from("needs")
-    .update({ status: "queued", error: null })
-    .eq("id", id)
-    .in("status", ["new", "done", "error"]); // no-op while queued/scanning
-  if (error) throw new Error(`queueNeed failed: ${error.message}`);
+    .update({ status: "queued", error: null, heartbeat_at: null })
+    .eq("id", id);
+  if (error) throw new Error(`retryNeed failed: ${error.message}`);
 }
 
 // Clear a need's findings and reset it to 'new':

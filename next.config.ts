@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: __dirname,
   },
+  async redirects() {
+    // /needs is superseded by the campaign flow on the home page.
+    return [{ source: "/needs", destination: "/", permanent: true }];
+  },
 };
 
 export default nextConfig;
