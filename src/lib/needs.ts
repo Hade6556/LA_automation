@@ -1,5 +1,16 @@
 import { supabaseAdmin } from "@/lib/supabase/server";
-import type { Need, SearchFilters } from "@/lib/types";
+import { ACTIVE_NEED_STATUSES, type Need, type SearchFilters } from "@/lib/types";
+
+// A live status whose pipeline hasn't heartbeat recently = the process died
+// (heartbeats every 30s; spawn lag is covered by the created_at fallback).
+export function needIsStale(
+  n: Pick<Need, "status" | "heartbeat_at" | "started_at" | "created_at">,
+  maxAgeMs = 2 * 60 * 1000,
+): boolean {
+  if (!ACTIVE_NEED_STATUSES.includes(n.status)) return false;
+  const last = n.heartbeat_at ?? n.started_at ?? n.created_at;
+  return Date.now() - new Date(last).getTime() > maxAgeMs;
+}
 
 // Human-readable one-line rendering of a filter set — mirrors OpenOutreach's
 // SearchFilter.to_label so the two surfaces describe needs identically.

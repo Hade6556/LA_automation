@@ -1,4 +1,4 @@
-import type { Candidate, CandidateStatus, Label } from "@/lib/types";
+import type { Candidate, CandidateStatus, Label, NeedStatus } from "@/lib/types";
 
 // Ilona's manual verdict ALWAYS overrides the computed label (hard rule #5).
 export function effectiveLabel(
@@ -34,6 +34,21 @@ export function statusClasses(s: CandidateStatus): string {
   if (s === "holding") return "bg-zinc-100 text-zinc-500";
   return "bg-zinc-100 text-zinc-700";
 }
+
+// Campaign (need) pipeline status, for the home list + campaign page banner.
+// `live` statuses pulse — the pipeline is (supposed to be) working.
+export const NEED_STATUS_META: Record<
+  NeedStatus,
+  { label: string; chip: string; live: boolean }
+> = {
+  new: { label: "Draft", chip: "bg-zinc-100 text-zinc-500", live: false },
+  queued: { label: "Starting…", chip: "bg-amber-100 text-amber-700", live: true },
+  scanning: { label: "Scanning LinkedIn…", chip: "bg-amber-100 text-amber-700", live: true },
+  ranking: { label: "Ranking…", chip: "bg-sky-100 text-sky-700", live: true },
+  researching: { label: "Deep research…", chip: "bg-violet-100 text-violet-700", live: true },
+  done: { label: "Done", chip: "bg-emerald-100 text-emerald-800", live: false },
+  error: { label: "Error", chip: "bg-rose-100 text-rose-700", live: false },
+};
 
 // Verdict derived from the overall fit score, for the 60-second scorecard.
 export function verdictFor(
