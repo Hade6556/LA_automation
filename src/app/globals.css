@@ -230,6 +230,14 @@ body {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
+/* Swipe-deck ghost fly-off. No `from` — the animation starts from the card's
+   inline transform (= wherever the drag was released). */
+@keyframes fly-off-right {
+  to { transform: translateX(140%) rotate(20deg); opacity: 0; }
+}
+@keyframes fly-off-left {
+  to { transform: translateX(-140%) rotate(-20deg); opacity: 0; }
+}
 
 .animate-fade-up {
   opacity: 0;

@@ -36,8 +36,10 @@ export default async function Home() {
           >
             Vibe code your <span className="text-gradient italic">need</span>
           </h1>
+          {/* min-h reserves two lines on phones — cycling roles of different
+              lengths must never shift the input below. */}
           <p
-            className="animate-fade-up mt-5 font-mono text-base text-muted sm:text-lg"
+            className="animate-fade-up mt-5 min-h-12 font-mono text-base text-balance text-muted sm:min-h-7 sm:text-lg"
             style={{ animationDelay: "200ms" }}
           >
             I want to find <RotatingRole />

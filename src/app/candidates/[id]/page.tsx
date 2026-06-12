@@ -93,7 +93,9 @@ export default async function CandidatePage({
         ) : null}
         {/* ===== 60-SECOND SCORECARD ===== */}
         <section className="rounded-2xl border border-border-soft bg-surface p-6 shadow-sm">
-          <div className="flex items-start gap-4">
+          {/* flex-wrap: on phones the verdict+score block drops to its own row
+              below the name instead of colliding with it. */}
+          <div className="flex flex-wrap items-start gap-4">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -107,7 +109,7 @@ export default async function CandidatePage({
                 {initials(c.full_name)}
               </div>
             )}
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-[1_1_12rem]">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold">{c.full_name ?? "—"}</h1>
                 <a
@@ -121,11 +123,11 @@ export default async function CandidatePage({
               </div>
               {oneLiner ? <p className="mt-0.5 text-sm text-muted">{oneLiner}</p> : null}
             </div>
-            <div className="shrink-0 text-right">
+            <div className="w-full text-left sm:w-auto sm:shrink-0 sm:text-right">
               <span className={`inline-block rounded-full px-3 py-1 text-sm font-semibold ${verdict.chip}`}>
                 {verdict.label}
               </span>
-              <div className="mt-1 text-4xl font-bold tabular-nums leading-none">
+              <div className="mt-1 text-3xl font-bold tabular-nums leading-none sm:text-4xl">
                 {c.rank_score ?? "—"}
               </div>
               <div className="text-[10px] uppercase tracking-wide text-faint">

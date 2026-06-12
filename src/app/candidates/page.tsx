@@ -80,7 +80,10 @@ export default async function AllCandidates({
         </div>
 
         <div className="card animate-fade-up overflow-hidden p-0" style={{ animationDelay: "140ms" }}>
-          <table className="w-full text-sm">
+          {/* The 8-column table keeps desktop proportions and scrolls sideways
+              inside the card on phones — never crushes or overflows the page. */}
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[56rem] text-sm">
             <thead>
               <tr className="border-b border-border-soft text-left">
                 {["Candidate", "Now", "Status", "Rank", "Label", "Track", "Reach", "Availability"].map((h) => (
@@ -209,6 +212,7 @@ export default async function AllCandidates({
               ) : null}
             </tbody>
           </table>
+          </div>
         </div>
       </main>
     </div>

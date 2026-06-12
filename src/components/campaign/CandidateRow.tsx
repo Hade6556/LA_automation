@@ -41,7 +41,7 @@ export default function CandidateRow({
       }`}
     >
       <div
-        className={`w-7 shrink-0 text-center font-mono text-base font-bold tabular-nums sm:w-9 sm:text-lg ${
+        className={`w-5 shrink-0 text-center font-mono text-sm font-bold tabular-nums sm:w-9 sm:text-lg ${
           rank == null ? "text-border" : topThree ? "text-gradient" : "text-faint"
         }`}
         title={rank != null ? `Ranked #${rank} in this campaign` : "Not scored yet"}
@@ -56,10 +56,10 @@ export default function CandidateRow({
             src={photo}
             alt=""
             referrerPolicy="no-referrer"
-            className="h-11 w-11 rounded-full bg-surface-2 object-cover ring-1 ring-border-soft transition hover:ring-2 hover:ring-cyan-500/50"
+            className="h-9 w-9 rounded-full bg-surface-2 object-cover ring-1 ring-border-soft transition hover:ring-2 hover:ring-cyan-500/50 sm:h-11 sm:w-11"
           />
         ) : (
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-2 text-sm font-medium text-muted ring-1 ring-border-soft transition hover:ring-2 hover:ring-cyan-500/50">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-sm font-medium text-muted ring-1 ring-border-soft transition hover:ring-2 hover:ring-cyan-500/50 sm:h-11 sm:w-11">
             {initials(c.full_name)}
           </div>
         )}
@@ -120,12 +120,13 @@ export default function CandidateRow({
         </div>
       </div>
 
-      <div className="flex w-24 shrink-0 flex-col items-end gap-1.5 sm:w-28">
+      <div className="flex w-16 shrink-0 flex-col items-end gap-1.5 sm:w-28">
         {c.rank_score != null ? (
           <div className="w-full text-right">
             <div className="flex items-baseline justify-end gap-1.5">
-              <span className={`chip ${verdict.chip}`}>{verdict.label}</span>
-              <span className={`text-2xl font-bold tabular-nums leading-none ${SCORE_TEXT[verdict.bar] ?? "text-ink"}`}>
+              {/* Verdict text only from sm up — on phones the score + bar say it. */}
+              <span className={`chip hidden sm:inline-flex ${verdict.chip}`}>{verdict.label}</span>
+              <span className={`text-xl font-bold tabular-nums leading-none sm:text-2xl ${SCORE_TEXT[verdict.bar] ?? "text-ink"}`}>
                 {c.rank_score}
               </span>
             </div>
@@ -151,7 +152,7 @@ export default function CandidateRow({
             <input type="hidden" name="need_id" value={c.need_id ?? ""} />
             <button
               type="submit"
-              className="rounded-md border border-border-soft px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-border hover:text-ink"
+              className="whitespace-nowrap rounded-md border border-border-soft px-2 py-1 text-xs font-medium text-muted transition-colors hover:border-border hover:text-ink sm:px-2.5"
             >
               {researched ? "Re-research" : "Research"}
             </button>
