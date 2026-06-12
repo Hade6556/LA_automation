@@ -7,7 +7,19 @@ import path from "node:path";
 // inherited — Next loads .env.local into process.env. Output goes to logs/
 // (gitignored); liveness is tracked via needs.heartbeat_at, not the process.
 
+// The pipeline can only run on the cockpit machine: serverless hosts (Vercel)
+// have a read-only filesystem, freeze detached children, and lack the local
+// OpenOutreach LinkedIn session the scan depends on. Browsing/swiping work
+// fine there — only spawn-triggering actions must check this first.
+export function pipelineHostAvailable(): boolean {
+  return !process.env.VERCEL;
+}
+
 function launch(script: string, args: string[], logName: string): void {
+  if (!pipelineHostAvailable()) {
+    console.warn(`pipeline spawn skipped (serverless host): ${script}`);
+    return;
+  }
   const root = process.cwd();
   mkdirSync(path.join(root, "logs"), { recursive: true });
   const fd = openSync(path.join(root, "logs", `${logName}.log`), "a");
