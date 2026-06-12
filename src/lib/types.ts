@@ -135,6 +135,7 @@ export interface Need {
   need_text: string;
   label: string;
   filters: SearchFilters;
+  purpose: string; // what the user will DO with the list ('' = unstated) — 0005_add_need_purpose
   status: NeedStatus;
   error: string | null;
   found_count: number;

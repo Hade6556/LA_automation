@@ -23,14 +23,20 @@ const SCHEMA = {
     current_companies: { type: "array", items: { type: "string" } },
     keywords: {
       type: "string",
-      description: "Residual freetext only (skills/products) — not title/industry/location.",
+      description:
+        "Residual freetext only (skills/products) — not title/industry/location, and NEVER the purpose/outreach goal.",
     },
     network: {
       type: "array",
       items: { type: "string", enum: ["F", "S", "O"] },
     },
+    purpose: {
+      type: "string",
+      description:
+        "What the user will DO with the people on this list — their outreach goal, faithful to their own wording. Empty string if not stated.",
+    },
   },
-  required: ["title", "industries", "locations", "current_companies", "keywords", "network"],
+  required: ["title", "industries", "locations", "current_companies", "keywords", "network", "purpose"],
   additionalProperties: false,
 } as const;
 
@@ -43,10 +49,18 @@ Rules:
 - current_companies: specific employers, only if the need names them. Usually empty.
 - keywords: residual freetext ONLY — skills, products, specialties that are not the title, industry, or location. Often empty.
 - network: connection-degree codes (F=1st, S=2nd, O=3rd+), only if the need explicitly mentions connection degree.
+- purpose: what the user will DO with the people on the list — their outreach goal, kept faithful to their own wording (e.g. "invite them to join my company Lost Astronaut as CEO", "sell our analytics product to them", "raise a seed round from them"). Empty string if the need does not state a purpose — never infer or invent one.
+
+The purpose is NOT a search filter. Wording that describes the goal ("to invite to…", "to sell to…", "to recruit for…", and company/product names that belong to the USER rather than the target) must NEVER appear in title, industries, locations, current_companies, or keywords. Filters describe WHO the person is; purpose describes what the user wants from them.
 
 Stay faithful to the need — do not invent industries, locations, or seniority the user did not state or clearly imply.`;
 
-export async function needToFilters(needText: string): Promise<SearchFilters> {
+export interface ParsedNeed {
+  filters: SearchFilters;
+  purpose: string;
+}
+
+export async function parseNeed(needText: string): Promise<ParsedNeed> {
   const anthropic = new Anthropic();
   const resp = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
@@ -57,5 +71,7 @@ export async function needToFilters(needText: string): Promise<SearchFilters> {
   });
   const text = resp.content.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("Claude returned no text for need conversion");
-  return JSON.parse(text) as SearchFilters;
+  const out = JSON.parse(text) as SearchFilters & { purpose: string };
+  const { purpose, ...filters } = out;
+  return { filters, purpose };
 }

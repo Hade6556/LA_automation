@@ -92,6 +92,7 @@ export async function getNeed(
 export async function createCampaign(
   needText: string,
   filters: SearchFilters,
+  purpose: string,
 ): Promise<Need> {
   const { data, error } = await supabaseAdmin()
     .from("needs")
@@ -99,6 +100,7 @@ export async function createCampaign(
       need_text: needText,
       label: labelForFilters(filters),
       filters,
+      purpose,
       status: "queued",
     })
     .select("*")

@@ -2,9 +2,11 @@
 //   node --env-file=.env.local scripts/rank.mjs                   # ranks status='sourced' → 'ranked'
 //   node --env-file=.env.local scripts/rank.mjs --all             # re-ranks every candidate
 //   node --env-file=.env.local scripts/rank.mjs --need-id <uuid>  # only that campaign's people
+//   node --env-file=.env.local scripts/rank.mjs … --dry-run       # print composed prompts, no API calls
 //
 // Sets rank_score (0-100) + rank_reason, and advances sourced → ranked.
-// The rubric is sent as a cached system prompt (reused across candidates).
+// The rubric is sent as a cached system prompt (reused across candidates);
+// per-candidate campaign context (need + purpose) rides in the user message.
 
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -54,6 +56,29 @@ const { data: cands, error: cErr } = await q;
 if (cErr) { console.error(cErr.message); process.exit(1); }
 if (!cands?.length) { console.error("No candidates to rank."); process.exit(0); }
 
+// Campaign context: candidates can span multiple needs (default / --all runs),
+// so the need map is keyed per candidate, not per run.
+const needIds = [...new Set(cands.map((c) => c.need_id).filter(Boolean))];
+let needsById = {};
+if (needIds.length) {
+  const { data: needRows, error: nErr } = await supabase
+    .from("needs").select("id, need_text, purpose").in("id", needIds);
+  if (nErr) { console.error(nErr.message); process.exit(1); }
+  needsById = Object.fromEntries((needRows ?? []).map((n) => [n.id, n]));
+}
+
+// Goes in the per-candidate user message (not the cached system prompt) so the
+// system-prompt cache survives runs that span multiple needs.
+function campaignBlock(c) {
+  const need = c.need_id ? needsById[c.need_id] : null;
+  if (!need) return "";
+  const lines = [`Looking for: ${need.need_text}`];
+  if (need.purpose?.trim()) {
+    lines.push(`Purpose (what the user will do with this list): ${need.purpose.trim()}`);
+  }
+  return `Campaign context:\n${lines.join("\n")}\n\n`;
+}
+
 const SYSTEM = `You are an expert talent scout for Lost Astronaut, a venture builder.
 Score how well a candidate fits, using this rubric (JSON):
 
@@ -64,7 +89,16 @@ Rules:
   (2-4 sentences) citing the strongest and weakest CONCRETE signals for this person.
 - Apply the rubric weights. Reward genuine builder/leadership pedigree and domain (adjacent_space) fit.
 - Missing data (e.g. follower counts, stated availability) is UNKNOWN, not negative — do not penalize
-  for absent data; note it briefly if it matters.`;
+  for absent data; note it briefly if it matters.
+- The user message may include a "Campaign context" block: who the user is searching for and what
+  they will DO with the list (the purpose). When present, score fit FOR THAT CAMPAIGN, not generic
+  impressiveness — interpret each rubric signal through the lens of the purpose:
+  recruiting / inviting to join → availability, openness to a move, and plausibility of actually
+  joining matter more (a comfortable public-company CEO ranks below an equally strong operator with
+  departure or "open to next thing" signals); selling / pitching to → current-role relevance and
+  buying authority matter more; advising → seniority and domain authority; co-founding → builder
+  track record and availability. A dazzling candidate who clearly would not serve the purpose is
+  NOT a strong fit, and rank_reason should say so.`;
 
 const SCHEMA = {
   type: "object",
@@ -75,6 +109,23 @@ const SCHEMA = {
   required: ["rank_score", "rank_reason"],
   additionalProperties: false,
 };
+
+if (process.argv.includes("--dry-run")) {
+  const c = cands[0];
+  const facts = {
+    full_name: c.full_name,
+    headline: c.headline,
+    current_title: c.current_title,
+    current_company: c.current_company,
+    background: c.background,
+    social: c.social,
+    signals: c.signals,
+  };
+  console.error(`--- SYSTEM ---\n${SYSTEM}\n`);
+  console.error(`--- USER (first of ${cands.length}: ${c.full_name}) ---`);
+  console.error(`${campaignBlock(c)}Candidate to score:\n${JSON.stringify(facts, null, 2)}`);
+  process.exit(0);
+}
 
 console.error(`Ranking ${cands.length} candidate(s) with claude-opus-4-8 (concurrency ${CONCURRENCY})…`);
 let ok = 0;
@@ -96,7 +147,7 @@ async function rankOne(c) {
       output_config: { format: { type: "json_schema", schema: SCHEMA }, effort: "medium" },
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
       messages: [
-        { role: "user", content: `Candidate to score:\n${JSON.stringify(facts, null, 2)}` },
+        { role: "user", content: `${campaignBlock(c)}Candidate to score:\n${JSON.stringify(facts, null, 2)}` },
       ],
     });
     const text = resp.content.find((b) => b.type === "text")?.text;

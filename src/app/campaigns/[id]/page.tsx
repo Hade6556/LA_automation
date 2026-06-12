@@ -48,6 +48,11 @@ export default async function CampaignPage({
             <h1 className="font-display text-3xl text-ink" title={need.need_text}>
               {need.need_text}
             </h1>
+            {need.purpose ? (
+              <p className="mt-1 font-mono text-xs text-muted" title="Campaign purpose">
+                → {need.purpose}
+              </p>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {filterChips(need.filters).map((chip, i) => (
                 <span

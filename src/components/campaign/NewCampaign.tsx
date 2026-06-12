@@ -13,6 +13,7 @@ export default function NewCampaign() {
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [needText, setNeedText] = useState("");
   const [filters, setFilters] = useState<SearchFilters | null>(null);
+  const [purpose, setPurpose] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -22,6 +23,7 @@ export default function NewCampaign() {
       const res = await suggestFiltersAction(needText);
       if (res.ok) {
         setFilters(res.filters);
+        setPurpose(res.purpose);
         setPhase("review");
       } else {
         setError(res.error);
@@ -34,7 +36,7 @@ export default function NewCampaign() {
     setError(null);
     startTransition(async () => {
       // Redirects to /campaigns/[id] on success; only returns on validation error.
-      const res = await createCampaignAction(needText, filters);
+      const res = await createCampaignAction(needText, filters, purpose);
       if (res && !res.ok) setError(res.error);
     });
   };
@@ -59,6 +61,25 @@ export default function NewCampaign() {
         </div>
 
         <FilterEditor value={filters} onChange={setFilters} />
+
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <label htmlFor="purpose" className="eyebrow">
+              Purpose
+            </label>
+            <span className="font-mono text-[11px] text-faint">
+              what you&apos;ll do with the list — sharpens ranking
+            </span>
+          </div>
+          <textarea
+            id="purpose"
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            rows={2}
+            placeholder="e.g. Invite them to join Lost Astronaut as CEO"
+            className="field w-full resize-none px-3 py-2 text-sm"
+          />
+        </div>
 
         {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
 
@@ -88,13 +109,13 @@ export default function NewCampaign() {
         }}
         rows={3}
         autoFocus
-        placeholder="e.g. CTO of a fintech in Singapore who built a product from zero…"
+        placeholder="e.g. A fintech CTO in Singapore — to invite as co-founder of my startup…"
         className="w-full resize-none bg-transparent px-3.5 pt-3 pb-2 text-[0.95rem] text-ink outline-none placeholder:text-faint"
       />
       {error ? <p className="px-3.5 pb-1 text-sm text-rose-300">{error}</p> : null}
       <div className="flex items-center justify-between gap-3 px-3.5 pb-1 pt-1">
         <p className="font-mono text-[11px] text-faint">
-          ⏎ AI turns this into precise LinkedIn filters
+          ⏎ AI extracts who you need + what for
         </p>
         <button
           type="button"

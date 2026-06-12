@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import { needToFilters } from "@/lib/need-filters";
+import { parseNeed } from "@/lib/need-filters";
 import { markResearching } from "@/lib/candidates";
 import { createCampaign, deleteNeed, retryNeed } from "@/lib/needs";
 import { spawnCampaignPipeline, spawnResearch } from "@/lib/pipeline/spawn";
@@ -21,6 +21,7 @@ async function requireAuth(): Promise<void> {
 }
 
 const clip = (s: unknown) => String(s ?? "").trim().slice(0, 200);
+const clipPurpose = (s: unknown) => String(s ?? "").trim().slice(0, 500);
 const clipList = (xs: unknown) =>
   (Array.isArray(xs) ? xs : []).map(clip).filter(Boolean).slice(0, 10);
 
@@ -41,7 +42,7 @@ function sanitizeFilters(f: SearchFilters): SearchFilters {
 }
 
 export type SuggestFiltersResult =
-  | { ok: true; filters: SearchFilters }
+  | { ok: true; filters: SearchFilters; purpose: string }
   | { ok: false; error: string };
 
 export async function suggestFiltersAction(needText: string): Promise<SuggestFiltersResult> {
@@ -49,9 +50,10 @@ export async function suggestFiltersAction(needText: string): Promise<SuggestFil
   const text = String(needText ?? "").trim();
   if (!text) return { ok: false, error: "Type what you're looking for first." };
   try {
-    return { ok: true, filters: sanitizeFilters(await needToFilters(text)) };
+    const { filters, purpose } = await parseNeed(text);
+    return { ok: true, filters: sanitizeFilters(filters), purpose: clipPurpose(purpose) };
   } catch (e) {
-    console.error("needToFilters failed:", e);
+    console.error("parseNeed failed:", e);
     return { ok: false, error: "Couldn't turn that into filters — try rephrasing." };
   }
 }
@@ -59,6 +61,7 @@ export async function suggestFiltersAction(needText: string): Promise<SuggestFil
 export async function createCampaignAction(
   needText: string,
   filters: SearchFilters,
+  purpose: string,
 ): Promise<{ ok: false; error: string } | never> {
   await requireAuth();
   const text = String(needText ?? "").trim();
@@ -70,7 +73,7 @@ export async function createCampaignAction(
     return { ok: false, error: "Campaign needs at least one filter." };
   }
 
-  const need = await createCampaign(text, clean);
+  const need = await createCampaign(text, clean, clipPurpose(purpose));
   spawnCampaignPipeline(need.id);
   revalidatePath("/");
   redirect(`/campaigns/${need.id}`);

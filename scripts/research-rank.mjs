@@ -72,6 +72,29 @@ const { data: rubrics } = await supabase
 const rubric = rubrics?.[0]?.content;
 if (!rubric) { console.error("No active ranking rubric."); process.exit(1); }
 
+// ---- campaign context (need + purpose) ----
+// Keyed per candidate, not per run: --ids / global runs span multiple needs.
+const needIds = [...new Set(cands.map((c) => c.need_id).filter(Boolean))];
+let needsById = {};
+if (needIds.length) {
+  const { data: needRows, error: nErr } = await supabase
+    .from("needs").select("id, need_text, purpose").in("id", needIds);
+  if (nErr) { console.error(nErr.message); process.exit(1); }
+  needsById = Object.fromEntries((needRows ?? []).map((n) => [n.id, n]));
+}
+
+// Rides in the per-candidate user message so the cached assessor system prompt
+// stays constant across needs.
+function campaignBlock(c) {
+  const need = c.need_id ? needsById[c.need_id] : null;
+  if (!need) return "";
+  const lines = [`Looking for: ${need.need_text}`];
+  if (need.purpose?.trim()) {
+    lines.push(`Purpose (what the user will do with this list): ${need.purpose.trim()}`);
+  }
+  return `Campaign context:\n${lines.join("\n")}\n\n`;
+}
+
 // ---- tools ----
 const gatherTools = [
   { type: "web_search_20260209", name: "web_search", max_uses: 2 },
@@ -90,7 +113,7 @@ const submitTool = {
     type: "object",
     properties: {
       one_liner: { type: "string", description: "<=12 words: who they are." },
-      bottom_line: { type: "string", description: "ONE sentence: the core reason they are/aren't a fit." },
+      bottom_line: { type: "string", description: "ONE sentence: the core reason they are/aren't a fit for the campaign purpose when one is given (otherwise general fit)." },
       top_strengths: { type: "array", items: { type: "string" }, description: "2-3 short concrete strength phrases." },
       watch_outs: { type: "array", items: { type: "string" }, description: "1-2 short risk/gap phrases." },
       summary: { type: "string", description: "2-4 sentence summary of who they are and what they've done." },
@@ -166,7 +189,19 @@ Output rules:
   Polytechnique, CMU), ex-FAANG/Stripe-tier companies, scaled a team/product past a notable bar.
   "VP at a startup", a generic BSc, or ordinary seniority are NOT highlights — return [] rather
   than pad. Labels <=4 words. Never invent facts; every highlight needs a source you saw.
-- Unknown data (availability, follower counts) is UNKNOWN, not negative — say so; don't penalize.`;
+- Unknown data (availability, follower counts) is UNKNOWN, not negative — say so; don't penalize.
+
+Campaign context:
+- The user message may include a "Campaign context" block: who the user is searching for and what
+  they will DO with the list (the purpose). When present, assess fit FOR THAT CAMPAIGN, not generic
+  impressiveness — interpret each rubric signal through the lens of the purpose: recruiting /
+  inviting to join → availability, openness to a move, and plausibility of actually joining matter
+  more (a comfortable public-company CEO ranks below an equally strong operator with departure or
+  "open to next thing" signals); selling / pitching to → current-role relevance and buying
+  authority; advising → seniority and domain authority; co-founding → builder track record and
+  availability.
+- bottom_line must answer the campaign question: the core reason they are / aren't a fit for the
+  stated purpose, not merely how impressive they are.`;
 
 const HIGHLIGHT_CATEGORIES = ["education", "exit", "scale", "pedigree", "recognition", "social"];
 function sanitizeHighlights(raw) {
@@ -210,14 +245,26 @@ if a result is about a same-named different person, skip it. Never invent facts 
 If almost nothing is found, return one line: "Little public info found for this angle."
 No intro, no conclusion — bullets only.`;
 
-const GATHER_ANGLES = [
-  `Career & companies: current role, full career history, companies founded/led/built, exits,
-acquisitions, IPOs, team/revenue scale (with numbers where possible). Search e.g. "<name> <current company>", "<name> founder OR CEO".`,
-  `Public presence: interviews, podcasts, talks, press coverage, awards, recognition, social
+// Still exactly 3 gatherers; the career angle gains a purpose hint when the
+// candidate's campaign states one (no extra API calls).
+function gatherAngles(c) {
+  const need = c.need_id ? needsById[c.need_id] : null;
+  const purpose = need?.purpose?.trim();
+  const purposeHint = purpose
+    ? `
+The user's goal for this person: "${purpose}". Also look for signals relevant to that goal
+(e.g. for recruiting: recent departure, role wind-down, "open to opportunities", advisory-only
+status; for selling: budget ownership, current vendor stack).`
+    : "";
+  return [
+    `Career & companies: current role, full career history, companies founded/led/built, exits,
+acquisitions, IPOs, team/revenue scale (with numbers where possible). Search e.g. "<name> <current company>", "<name> founder OR CEO".${purposeHint}`,
+    `Public presence: interviews, podcasts, talks, press coverage, awards, recognition, social
 following / audience size. Search e.g. "<name> interview OR podcast OR talk", "<name> news".`,
-  `Education & achievements: degrees and schools (flag elite programs like HBS/Stanford GSB/MIT),
+    `Education & achievements: degrees and schools (flag elite programs like HBS/Stanford GSB/MIT),
 notable concrete achievements, publications, patents. Search e.g. "<name> education OR MBA OR university".`,
-];
+  ];
+}
 
 async function gather(c, angle) {
   const messages = [
@@ -241,7 +288,7 @@ async function gather(c, angle) {
 }
 
 async function research(c) {
-  const findings = await Promise.all(GATHER_ANGLES.map((angle) => gather(c, angle).catch(() => "")));
+  const findings = await Promise.all(gatherAngles(c).map((angle) => gather(c, angle).catch(() => "")));
   const merged = ["## Career & companies", findings[0], "## Public presence", findings[1], "## Education & achievements", findings[2]]
     .join("\n\n");
   const resp = await anthropic.messages.create({
@@ -250,7 +297,7 @@ async function research(c) {
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     tools: [submitTool],
     tool_choice: { type: "tool", name: "submit_assessment" },
-    messages: [{ role: "user", content: `Assess this person. LinkedIn seed data:\n${userPrompt(c)}\n\nWeb research findings:\n${merged}` }],
+    messages: [{ role: "user", content: `${campaignBlock(c)}Assess this person. LinkedIn seed data:\n${userPrompt(c)}\n\nWeb research findings:\n${merged}` }],
   }, { timeout: 120_000, maxRetries: 1, signal: AbortSignal.timeout(150_000) });
   const submit = resp.content.find((b) => b.type === "tool_use" && b.name === "submit_assessment");
   if (!submit) throw new Error("did not submit assessment");
