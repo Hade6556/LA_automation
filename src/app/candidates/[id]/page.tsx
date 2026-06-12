@@ -5,7 +5,7 @@ import { getCandidate, getResearchedCohort } from "@/lib/candidates";
 import { computeStanding, standoutsAndLags } from "@/lib/relative";
 import { selectHighlights } from "@/lib/highlights";
 import { RANK_SIGNALS, type Candidate } from "@/lib/types";
-import { STATUS_META, effectiveLabel, labelClasses, verdictFor } from "@/lib/pipeline/labels";
+import { STATUS_META, effectiveLabel, labelClasses, relColor, verdictFor } from "@/lib/pipeline/labels";
 
 function photoUrl(social: Record<string, unknown>): string | null {
   const u = (social as { photo_url?: unknown })?.photo_url;
@@ -14,11 +14,6 @@ function photoUrl(social: Record<string, unknown>): string | null {
 function initials(name: string | null): string {
   if (!name) return "?";
   return name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
-}
-function relColor(percentile: number): string {
-  if (percentile >= 0.66) return "bg-emerald-500";
-  if (percentile >= 0.33) return "bg-amber-400";
-  return "bg-rose-400";
 }
 const signalLabel = (key: string) => RANK_SIGNALS.find(([k]) => k === key)?.[1] ?? key;
 
@@ -56,6 +51,13 @@ export default async function CandidatePage({
   const { standouts, lags } = standing
     ? standoutsAndLags(standing)
     : { standouts: [], lags: [] };
+
+  // Overall position among researched candidates, for context next to the score.
+  const scoredCohort = cohort
+    .filter((x) => x.rank_score != null)
+    .sort((a, b) => Number(b.rank_score) - Number(a.rank_score));
+  const overallIdx = scoredCohort.findIndex((x) => x.id === c.id);
+  const overallRank = overallIdx === -1 ? null : { n: overallIdx + 1, of: scoredCohort.length };
 
   const photo = photoUrl(c.social);
   const label = effectiveLabel(c);
@@ -132,13 +134,27 @@ export default async function CandidatePage({
               <div className="mt-1 text-4xl font-bold tabular-nums leading-none">
                 {c.rank_score ?? "—"}
               </div>
-              <div className="text-[10px] uppercase tracking-wide text-zinc-400">fit score</div>
+              <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+                fit score
+                {overallRank ? (
+                  <span className="ml-1 font-semibold normal-case tracking-normal text-zinc-500">
+                    · #{overallRank.n} of {overallRank.of}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
 
           {bottomLine ? (
             <p className="mt-4 text-[15px] leading-relaxed text-zinc-900">
               <span className="font-semibold">Bottom line:</span> {bottomLine}
+            </p>
+          ) : null}
+
+          {c.comparison_note ? (
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+              <span className="font-semibold text-zinc-700">Why ranked here:</span>{" "}
+              {c.comparison_note}
             </p>
           ) : null}
 
@@ -201,54 +217,72 @@ export default async function CandidatePage({
             </div>
           ) : null}
 
-          {/* How they stack up vs the cohort */}
-          {standing ? (
+          {/* Per-signal scores, with cohort standing when 2+ are researched */}
+          {c.rank_breakdown ? (
             <div className="mt-5 border-t border-zinc-100 pt-4">
-              <div className="space-y-1 text-sm">
-                {standouts.length ? (
-                  <p className="text-emerald-700">
-                    <span className="font-semibold">Strongest in group:</span>{" "}
-                    {standouts.map((s) => `${s.label} #${s.rank}`).join(" · ")}
-                  </p>
-                ) : null}
-                {lags.length ? (
-                  <p className="text-amber-700">
-                    <span className="font-semibold">Weakest in group:</span>{" "}
-                    {lags.map((s) => `${s.label} #${s.rank}`).join(" · ")}
-                  </p>
-                ) : null}
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                Signals
+              </h3>
+              {standouts.length || lags.length ? (
+                <div className="mt-1.5 space-y-1 text-sm">
+                  {standouts.length ? (
+                    <p className="text-emerald-700">
+                      <span className="font-semibold">Strongest in group:</span>{" "}
+                      {standouts.map((s) => `${s.label} #${s.rank}`).join(" · ")}
+                    </p>
+                  ) : null}
+                  {lags.length ? (
+                    <p className="text-amber-700">
+                      <span className="font-semibold">Weakest in group:</span>{" "}
+                      {lags.map((s) => `${s.label} #${s.rank}`).join(" · ")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="mt-3 space-y-3">
+                {RANK_SIGNALS.map(([key, lbl]) => {
+                  const s = c.rank_breakdown?.[key];
+                  if (!s || typeof s.score !== "number") return null;
+                  const st = standing?.find((x) => x.key === key);
+                  const fill = st ? relColor(st.percentile) : verdictFor(s.score).bar;
+                  return (
+                    <div key={key}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-medium text-zinc-700">{lbl}</span>
+                        <span className="flex shrink-0 items-baseline gap-2">
+                          <span className="text-sm font-semibold tabular-nums text-zinc-900">
+                            {s.score}
+                          </span>
+                          {st ? (
+                            <span
+                              className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium tabular-nums text-zinc-600"
+                              title={`Ranked #${st.rank} of the ${st.of} researched candidates on this signal`}
+                            >
+                              #{st.rank}/{st.of}
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-zinc-100">
+                        <div
+                          className={`h-full rounded-full ${fill}`}
+                          style={{ width: `${Math.min(Math.max(s.score, 2), 100)}%` }}
+                        />
+                      </div>
+                      {s.note ? (
+                        <p className="mt-1 text-xs leading-snug text-zinc-500">{s.note}</p>
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
-              <div className="mt-3 flex items-end gap-2">
-                {standing.map((s) => (
-                  <div
-                    key={s.key}
-                    className="flex flex-1 flex-col items-center"
-                    title={`#${s.rank} of ${s.of} · score ${s.score}`}
-                  >
-                    <div className="flex h-14 w-full items-end justify-center">
-                      <div
-                        className={`w-4 rounded-t ${relColor(s.percentile)}`}
-                        style={{ height: `${Math.max(s.percentile * 100, 6)}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 text-center text-[10px] leading-tight text-zinc-500">
-                      {s.label}
-                    </div>
-                    <div className="text-[10px] font-medium tabular-nums text-zinc-700">
-                      #{s.rank}/{s.of}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[10px] text-zinc-400">
-                Ranked vs the {standing[0].of} researched candidates — taller = better than peers.
+              <p className="mt-2 text-[11px] text-zinc-400">
+                {standing
+                  ? `Bar = score (0–100) · colour = standing vs the ${standing[0].of} researched candidates.`
+                  : "Bar = score (0–100). Cohort comparison appears once 2+ candidates are researched."}
               </p>
             </div>
-          ) : (
-            <p className="mt-5 border-t border-zinc-100 pt-4 text-xs text-zinc-400">
-              Relative ranking appears once 2+ candidates are researched.
-            </p>
-          )}
+          ) : null}
 
           <div className="mt-4 flex items-center gap-2 text-xs text-zinc-400">
             <span className={`rounded px-2 py-0.5 ${labelClasses(label ?? "green")} ${label ? "" : "hidden"}`}>
@@ -274,12 +308,6 @@ export default async function CandidatePage({
             <span className="text-zinc-400 group-open:hidden"> — summary, achievements, education, sources</span>
           </summary>
           <div className="space-y-5 border-t border-zinc-100 px-6 py-5">
-            {c.comparison_note ? (
-              <div>
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Why they rank here</h2>
-                <p className="mt-1 text-sm text-zinc-800">{c.comparison_note}</p>
-              </div>
-            ) : null}
             {c.dossier?.summary ? (
               <div>
                 <h2 className="mb-1 text-sm font-semibold">Summary</h2>
@@ -321,25 +349,6 @@ export default async function CandidatePage({
                 <p className="text-sm text-zinc-400">—</p>
               )}
             </div>
-            {/* per-signal notes */}
-            {c.rank_breakdown ? (
-              <div>
-                <h2 className="mb-2 text-sm font-semibold">Signal detail</h2>
-                <div className="space-y-2">
-                  {RANK_SIGNALS.map(([key, lbl]) => {
-                    const s = c.rank_breakdown?.[key];
-                    if (!s) return null;
-                    return (
-                      <div key={key} className="text-sm">
-                        <span className="font-medium text-zinc-700">{lbl}</span>{" "}
-                        <span className="tabular-nums text-zinc-400">{s.score}</span>
-                        {s.note ? <span className="text-zinc-500"> — {s.note}</span> : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
             {c.sources?.length ? (
               <div>
                 <h2 className="mb-2 text-sm font-semibold">Sources ({c.sources.length})</h2>

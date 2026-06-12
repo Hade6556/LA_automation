@@ -14,6 +14,9 @@ function when(iso: string): string {
   });
 }
 
+// The campaign list is live DB state — never prerender it at build time.
+export const dynamic = "force-dynamic";
+
 // Home: type what you're looking for, and re-enter past campaigns.
 export default async function Home() {
   const needs = await getNeeds();

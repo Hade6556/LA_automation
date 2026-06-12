@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import AutoRefresh from "@/components/AutoRefresh";
-import CandidateCard from "@/components/campaign/CandidateCard";
+import CandidateRow from "@/components/campaign/CandidateRow";
 import PipelineBanner from "@/components/campaign/PipelineBanner";
 import { getCandidatesByNeed } from "@/lib/candidates";
 import { getNeed } from "@/lib/needs";
@@ -80,27 +80,33 @@ export default async function CampaignPage({
         <PipelineBanner need={need} />
 
         {candidates.length > 0 ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {candidates.map((c) => (
-              <CandidateCard key={c.id} candidate={c} pipelineActive={live} />
+          <div className="mt-5 space-y-2">
+            {candidates.map((c, i) => (
+              <CandidateRow
+                key={c.id}
+                candidate={c}
+                pipelineActive={live}
+                // Candidates arrive sorted by rank_score DESC with unscored last,
+                // so the index over scored rows is the leaderboard position.
+                rank={c.rank_score != null ? i + 1 : null}
+              />
             ))}
           </div>
         ) : need.status === "queued" || need.status === "scanning" ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 space-y-2">
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="animate-pulse rounded-xl border border-zinc-200 bg-white p-4"
+                className="flex animate-pulse items-center gap-4 rounded-xl border border-zinc-200 bg-white p-3.5"
                 style={{ animationDelay: `${i * 150}ms` }}
               >
-                <div className="flex items-start gap-3">
-                  <div className="h-11 w-11 rounded-full bg-zinc-100" />
-                  <div className="flex-1 space-y-2 py-1">
-                    <div className="h-3 w-2/3 rounded bg-zinc-100" />
-                    <div className="h-2.5 w-full rounded bg-zinc-100" />
-                  </div>
+                <div className="h-5 w-9 rounded bg-zinc-100" />
+                <div className="h-11 w-11 rounded-full bg-zinc-100" />
+                <div className="flex-1 space-y-2 py-1">
+                  <div className="h-3 w-1/3 rounded bg-zinc-100" />
+                  <div className="h-2.5 w-2/3 rounded bg-zinc-100" />
                 </div>
-                <div className="mt-4 h-2.5 w-1/2 rounded bg-zinc-100" />
+                <div className="h-6 w-16 rounded bg-zinc-100" />
               </div>
             ))}
           </div>

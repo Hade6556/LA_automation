@@ -1,3 +1,15 @@
+# LA_automation
+
+Lost Astronaut — LinkedIn candidate-sourcing cockpit. Define a need ("CEO in Asia of
+startup"), scan LinkedIn via OpenOutreach's faceted search, then rank, research, and review
+candidates. Next.js + Supabase, with local scan workers driving an authenticated
+`linkedin-cli` session.
+
+> Secrets live in `.env.local` (gitignored): `NEXT_PUBLIC_SUPABASE_URL`,
+> `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `LOST_ASTRONAUT_PASSWORD`.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

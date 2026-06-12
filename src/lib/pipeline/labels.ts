@@ -50,6 +50,13 @@ export const NEED_STATUS_META: Record<
   error: { label: "Error", chip: "bg-rose-100 text-rose-700", live: false },
 };
 
+// Cohort-percentile → bar colour for the per-signal bars on the candidate page.
+export function relColor(percentile: number): string {
+  if (percentile >= 0.66) return "bg-emerald-500";
+  if (percentile >= 0.33) return "bg-amber-400";
+  return "bg-rose-400";
+}
+
 // Verdict derived from the overall fit score, for the 60-second scorecard.
 export function verdictFor(
   score: number | null,

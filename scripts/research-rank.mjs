@@ -5,11 +5,13 @@
 //   node --env-file=.env.local scripts/research-rank.mjs --min-score 70
 //   node --env-file=.env.local scripts/research-rank.mjs --need-id <uuid> --top 5   # campaign-scoped
 //
-// For each shortlisted candidate: Opus researches them on the web (web_search +
-// web_fetch), then returns a structured dossier + per-signal sub-scores + overall
-// score via the strict `submit_assessment` tool. A final pass writes head-to-head
-// comparison notes. Writes dossier, rank_breakdown, highlights, sources,
-// rank_reason, rank_score, comparison_note, researched_at.
+// For each shortlisted candidate: 3 parallel Sonnet gatherers research one angle
+// each on the web (web_search + web_fetch), then a single Opus call assesses the
+// merged findings and returns a structured dossier + per-signal sub-scores +
+// overall score via the strict `submit_assessment` tool (forced, one turn).
+// A final Sonnet pass writes head-to-head comparison notes. Writes dossier,
+// rank_breakdown, highlights, sources, rank_reason, rank_score, comparison_note,
+// researched_at.
 
 import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
@@ -28,7 +30,7 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) { console.error("Missing Supabase env (use --env-file=.env.local)"); process.exit(1); }
 if (!process.env.ANTHROPIC_API_KEY) { console.error("Missing ANTHROPIC_API_KEY"); process.exit(1); }
 const supabase = createClient(url, key, { auth: { persistSession: false } });
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ maxRetries: 5 });
 
 // ---- shortlist selection ----
 const argv = process.argv.slice(2);
@@ -42,6 +44,16 @@ const top = Number(flag("--top") ?? (flag("--ids") || flag("--min-score") ? 0 : 
 const ids = (flag("--ids") || "").split(",").map((s) => s.trim()).filter(Boolean);
 const minScore = flag("--min-score") ? Number(flag("--min-score")) : null;
 const needId = flag("--need-id") || null; // scope to one campaign's candidates
+const CONCURRENCY = Math.max(1, Number(flag("--concurrency")) || 5);
+
+// Run fn over items with at most `limit` in flight. fn must not throw.
+async function mapLimit(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
 
 let query = supabase.from("candidates").select("*").order("rank_score", { ascending: false, nullsFirst: false });
 // Skip people who already have a dossier, unless explicitly forced or targeted by --ids.
@@ -61,8 +73,10 @@ const rubric = rubrics?.[0]?.content;
 if (!rubric) { console.error("No active ranking rubric."); process.exit(1); }
 
 // ---- tools ----
-const webSearch = { type: "web_search_20260209", name: "web_search", max_uses: 6 };
-const webFetch = { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 };
+const gatherTools = [
+  { type: "web_search_20260209", name: "web_search", max_uses: 2 },
+  { type: "web_fetch_20260209", name: "web_fetch", max_uses: 1 },
+];
 const signalSchema = {
   type: "object",
   properties: { score: { type: "integer" }, note: { type: "string" } },
@@ -121,20 +135,19 @@ const submitTool = {
   },
 };
 
-const SYSTEM = `You are an elite talent researcher for Lost Astronaut, a venture builder.
-Your job: deeply research one person on the public web, then assess their fit.
+const SYSTEM = `You are an elite talent assessor for Lost Astronaut, a venture builder.
+Your job: assess one person's fit from web research findings gathered for you.
 
 Score against this rubric (JSON):
 ${JSON.stringify(rubric, null, 2)}
 
-Research process — BE THOROUGH (do NOT stop after one search):
-1. Run AT LEAST 3-4 DISTINCT web searches, e.g.: "<name> <current company>",
-   "<name> interview OR podcast OR talk", "<name> founder OR CEO OR news", and the company's
-   background. Use web_fetch to open the most useful results.
-2. Corroborate across sources. Gather: current role, full career history, companies built/led,
-   concrete achievements (with numbers where possible), education, talks/press/interviews, and
-   public/online presence.
-3. Then call submit_assessment EXACTLY ONCE. Do not answer in plain prose.
+You will receive the person's LinkedIn seed data plus findings from parallel web researchers
+(career history, public presence, education — each fact with its source URL). Rules of evidence:
+- Trust only facts that carry a source URL or come from the LinkedIn seed. Never invent facts.
+- If a finding looks like it may be about a DIFFERENT person with the same name, discard it.
+- If findings are thin, assess from what exists, note the limited web presence in bottom_line,
+  and treat the gaps as UNKNOWN — not negative.
+Call submit_assessment exactly once. Do not answer in plain prose.
 
 Output rules:
 - one_liner: <=12 words on who they are (e.g. "CIO at Bella Aurora, ex-Affinity Petcare").
@@ -144,8 +157,8 @@ Output rules:
 - signal_scores: rate seniority, builder_track_record, domain_fit, availability, pedigree,
   social_presence 0-100, each with a one-line note citing a concrete fact.
 - rank_score: overall 0-100 using the rubric weights.
-- sources: include AT LEAST 3 real source URLs you actually used (fewer ONLY if the person has
-  almost no web presence — then say so in bottom_line). Never invent URLs or facts.
+- sources: the source URLs from the findings you actually relied on — at least 3 when available
+  (fewer ONLY if the person has almost no web presence — then say so in bottom_line).
 - highlights: AT MOST 4 facts so rare/impressive a recruiter would mention them first.
   Tier 1 = top-1% signals ONLY: HBS/Stanford GSB/Wharton MBA or elite PhD; company exit,
   acquisition, or IPO; public-company/NASDAQ CEO; ex-DeepMind/OpenAI/Google Brain; 100k+ followers.
@@ -186,48 +199,70 @@ function userPrompt(c) {
     linkedin_background: c.background,
     location: c.signals?.location ?? null,
   };
-  return `Research and assess this person. LinkedIn starting data:\n${JSON.stringify(seed, null, 2)}`;
+  return JSON.stringify(seed, null, 2);
+}
+
+const GATHER_SYSTEM = `You are a fast web researcher. Research ONE assigned angle about one person.
+Run 1-2 targeted web searches (web_fetch the single most useful page if needed), then return
+concise bullet-point facts — each bullet MUST end with its source URL in parentheses.
+Only report facts about THIS person: match the name AND company/background from the LinkedIn seed;
+if a result is about a same-named different person, skip it. Never invent facts or URLs.
+If almost nothing is found, return one line: "Little public info found for this angle."
+No intro, no conclusion — bullets only.`;
+
+const GATHER_ANGLES = [
+  `Career & companies: current role, full career history, companies founded/led/built, exits,
+acquisitions, IPOs, team/revenue scale (with numbers where possible). Search e.g. "<name> <current company>", "<name> founder OR CEO".`,
+  `Public presence: interviews, podcasts, talks, press coverage, awards, recognition, social
+following / audience size. Search e.g. "<name> interview OR podcast OR talk", "<name> news".`,
+  `Education & achievements: degrees and schools (flag elite programs like HBS/Stanford GSB/MIT),
+notable concrete achievements, publications, patents. Search e.g. "<name> education OR MBA OR university".`,
+];
+
+async function gather(c, angle) {
+  const messages = [
+    { role: "user", content: `Assigned angle:\n${angle}\n\nPerson (LinkedIn seed data):\n${userPrompt(c)}` },
+  ];
+  for (let i = 0; i < 4; i++) {
+    // Hung gatherer must not stall the candidate: hard 60s per attempt, no retry —
+    // a failed angle is swallowed by the caller and assessment proceeds without it.
+    const resp = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1200,
+      system: GATHER_SYSTEM,
+      tools: gatherTools,
+      messages,
+    }, { timeout: 60_000, maxRetries: 0, signal: AbortSignal.timeout(70_000) });
+    messages.push({ role: "assistant", content: resp.content });
+    if (resp.stop_reason === "pause_turn") continue; // server tool loop — resume
+    return resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+  }
+  return "";
 }
 
 async function research(c) {
-  const tools = [webSearch, webFetch, submitTool];
-  const messages = [{ role: "user", content: userPrompt(c) }];
-  for (let i = 0; i < 8; i++) {
-    const resp = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 8000,
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      tools,
-      messages,
-    });
-    const submit = resp.content.find((b) => b.type === "tool_use" && b.name === "submit_assessment");
-    if (submit) return submit.input;
-
-    messages.push({ role: "assistant", content: resp.content });
-    if (resp.stop_reason === "pause_turn") continue; // server tool loop — resume
-    if (resp.stop_reason === "end_turn") {
-      // didn't submit on its own — force the tool call once
-      const forced = await anthropic.messages.create({
-        model: "claude-opus-4-8",
-        max_tokens: 8000,
-        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-        tools,
-        tool_choice: { type: "tool", name: "submit_assessment" },
-        messages: [...messages, { role: "user", content: "Call submit_assessment now with your final assessment." }],
-      });
-      const s = forced.content.find((b) => b.type === "tool_use" && b.name === "submit_assessment");
-      if (s) return s.input;
-      throw new Error("did not submit assessment");
-    }
-    // stop_reason === 'tool_use' but not our submit (shouldn't happen) — nudge
-    messages.push({ role: "user", content: "Call submit_assessment now." });
-  }
-  throw new Error("research loop exhausted");
+  const findings = await Promise.all(GATHER_ANGLES.map((angle) => gather(c, angle).catch(() => "")));
+  const merged = ["## Career & companies", findings[0], "## Public presence", findings[1], "## Education & achievements", findings[2]]
+    .join("\n\n");
+  const resp = await anthropic.messages.create({
+    model: "claude-opus-4-8",
+    max_tokens: 4000,
+    system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+    tools: [submitTool],
+    tool_choice: { type: "tool", name: "submit_assessment" },
+    messages: [{ role: "user", content: `Assess this person. LinkedIn seed data:\n${userPrompt(c)}\n\nWeb research findings:\n${merged}` }],
+  }, { timeout: 120_000, maxRetries: 1, signal: AbortSignal.timeout(150_000) });
+  const submit = resp.content.find((b) => b.type === "tool_use" && b.name === "submit_assessment");
+  if (!submit) throw new Error("did not submit assessment");
+  return submit.input;
 }
 
-console.error(`Deep-researching ${cands.length} candidate(s) with claude-opus-4-8 + web search…\n`);
+console.error(`Deep-researching ${cands.length} candidate(s) — sonnet-4-6 gatherers + opus-4-8 assessor (concurrency ${CONCURRENCY})…\n`);
+const tStart = Date.now();
+const elapsed = () => `${Math.round((Date.now() - tStart) / 1000)}s`;
 const researched = [];
-for (const c of cands) {
+async function researchOne(c) {
+  const t0 = Date.now();
   try {
     console.error(`→ ${c.full_name} …`);
     await supabase.from("candidates").update({ researching: true }).eq("id", c.id);
@@ -258,16 +293,18 @@ for (const c of cands) {
     }).eq("id", c.id);
     if (error) throw new Error(error.message);
     researched.push({ id: c.id, full_name: c.full_name, rank_score: score, summary: a.summary, signal_scores: breakdown });
-    console.error(`  ✓ ${score}  ${c.full_name} — ${(a.sources ?? []).length} sources`);
+    console.error(`  ✓ ${score}  ${c.full_name} — ${(a.sources ?? []).length} sources (${Math.round((Date.now() - t0) / 1000)}s)`);
   } catch (e) {
     await supabase.from("candidates").update({ researching: false }).eq("id", c.id);
     console.error(`  ✗ FAILED ${c.full_name}: ${e.message}`);
   }
 }
+await mapLimit(cands, CONCURRENCY, researchOne);
+console.error(`\n[${elapsed()}] research loop done`);
 
 // ---- head-to-head comparison pass ----
 if (researched.length >= 2) {
-  console.error(`\nWriting head-to-head comparison notes…`);
+  console.error(`Writing head-to-head comparison notes…`);
   researched.sort((a, b) => b.rank_score - a.rank_score);
   const COMP_SCHEMA = {
     type: "object",
@@ -293,13 +330,17 @@ if (researched.length >= 2) {
     signal_scores: r.signal_scores,
   }));
   try {
+    console.error(`  [${elapsed()}] comparison call starting…`);
+    // Opus, not Sonnet: the gatherers saturate Sonnet's rate-limit bucket, so a
+    // Sonnet call here queues for minutes. Opus has headroom and returns fast.
     const resp = await anthropic.messages.create({
       model: "claude-opus-4-8",
       max_tokens: 4000,
       system: "You compare ranked candidates for a venture builder. For each, write a 1-2 sentence comparison_note making it CLEAR why they rank where they do versus the people directly above and below them — cite the decisive signal differences (e.g. stronger builder track record, weaker domain fit). Be concrete and specific to each person.",
       output_config: { format: { type: "json_schema", schema: COMP_SCHEMA } },
       messages: [{ role: "user", content: `Ranked candidates (highest first):\n${JSON.stringify(list, null, 2)}` }],
-    });
+    }, { timeout: 60_000, maxRetries: 1, signal: AbortSignal.timeout(90_000) });
+    console.error(`  [${elapsed()}] comparison response received`);
     const text = resp.content.find((b) => b.type === "text")?.text;
     const out = JSON.parse(text);
     for (const r of out.rankings ?? []) {
@@ -310,8 +351,11 @@ if (researched.length >= 2) {
       }
     }
   } catch (e) {
-    console.error(`  comparison pass failed: ${e.message}`);
+    console.error(`  [${elapsed()}] comparison pass skipped: ${e.message}`);
   }
 }
 
-console.error(`\n✓ Deep-researched ${researched.length}/${cands.length}.`);
+console.error(`\n[${elapsed()}] ✓ Deep-researched ${researched.length}/${cands.length}.`);
+// Timed-out gather sockets can keep the event loop alive long after the work is
+// done — and the pipeline waits on this process's exit. Leave nothing dangling.
+process.exit(0);

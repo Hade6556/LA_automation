@@ -20,11 +20,22 @@ if (!process.env.ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 const supabase = createClient(url, key, { auth: { persistSession: false } });
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({ maxRetries: 3, timeout: 90_000 });
 
 const rankAll = process.argv.includes("--all");
 const needIdIdx = process.argv.indexOf("--need-id");
 const needId = needIdIdx === -1 ? null : process.argv[needIdIdx + 1];
+const concIdx = process.argv.indexOf("--concurrency");
+const CONCURRENCY = Math.max(1, Number(concIdx === -1 ? 8 : process.argv[concIdx + 1]) || 8);
+
+// Run fn over items with at most `limit` in flight. fn must not throw.
+async function mapLimit(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
 
 const { data: rubrics, error: rErr } = await supabase
   .from("rubrics")
@@ -65,9 +76,9 @@ const SCHEMA = {
   additionalProperties: false,
 };
 
-console.error(`Ranking ${cands.length} candidate(s) with claude-opus-4-8…`);
+console.error(`Ranking ${cands.length} candidate(s) with claude-opus-4-8 (concurrency ${CONCURRENCY})…`);
 let ok = 0;
-for (const c of cands) {
+async function rankOne(c) {
   const facts = {
     full_name: c.full_name,
     headline: c.headline,
@@ -102,4 +113,5 @@ for (const c of cands) {
     console.error(`  FAILED ${c.full_name}: ${e.message}`);
   }
 }
+await mapLimit(cands, CONCURRENCY, rankOne);
 console.error(`\n✓ Ranked ${ok}/${cands.length}. Status → 'ranked'.`);

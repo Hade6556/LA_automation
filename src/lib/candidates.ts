@@ -51,15 +51,20 @@ export async function getCandidate(id: string): Promise<Candidate | null> {
 }
 
 // Lightweight cohort fetch for relative ranking — only researched candidates.
+// rank_score rides along so the detail page can show overall "#N of M".
 export async function getResearchedCohort(): Promise<
-  { id: string; rank_breakdown: Candidate["rank_breakdown"] }[]
+  { id: string; rank_breakdown: Candidate["rank_breakdown"]; rank_score: number | null }[]
 > {
   const { data, error } = await supabaseAdmin()
     .from("candidates")
-    .select("id, rank_breakdown")
+    .select("id, rank_breakdown, rank_score")
     .not("researched_at", "is", null);
   if (error) throw new Error(`getResearchedCohort failed: ${error.message}`);
-  return (data ?? []) as { id: string; rank_breakdown: Candidate["rank_breakdown"] }[];
+  return (data ?? []) as {
+    id: string;
+    rank_breakdown: Candidate["rank_breakdown"];
+    rank_score: number | null;
+  }[];
 }
 
 export async function getStatusCounts(): Promise<Record<string, number>> {
