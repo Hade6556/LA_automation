@@ -26,9 +26,9 @@ export type SwipeCard = {
 
 // Gesture tuning. Distance commits a deliberate drag; a flick commits sooner
 // but only with real distance behind it and matching direction.
-const COMMIT_PX = (w: number) => Math.min(w * 0.28, 110);
-const FLICK_V = 0.5; // px/ms of *recent* (smoothed) velocity
-const FLICK_MIN_PX = 48;
+const COMMIT_PX = (w: number) => Math.min(w * 0.22, 90);
+const FLICK_V = 0.4; // px/ms of *recent* (smoothed) velocity
+const FLICK_MIN_PX = 36;
 const DEAD_ZONE = 8; // px before the card visually follows the pointer
 
 function Stamp({ dir, solid }: { dir: "yes" | "no"; solid?: boolean }) {
@@ -294,7 +294,9 @@ export default function SwipeDeck({
           onPointerMove={onPointerMove}
           onPointerUp={() => endDrag(false)}
           onPointerCancel={() => endDrag(true)}
-          className="card absolute inset-0 z-10 flex touch-pan-y flex-col overflow-hidden"
+          // touch-none: we own every touch gesture — pan-y let the browser
+          // claim slightly-vertical swipes as scrolls and cancel them mid-drag.
+          className="card absolute inset-0 z-10 flex touch-none flex-col overflow-hidden"
         >
           <Stamp dir="yes" />
           <Stamp dir="no" />
