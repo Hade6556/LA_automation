@@ -30,14 +30,16 @@ export async function getCandidatesByNeed(needId: string): Promise<Candidate[]> 
   return (data ?? []) as Candidate[];
 }
 
-// Instant UI feedback for the Research button — the research script sets and
-// clears this flag itself, but only once its process has spun up.
-export async function markResearching(id: string): Promise<void> {
+// Queue a candidate for deep research. researching=true gives the instant
+// "researching…" pulse; research_requested_at is the queue marker the cockpit
+// worker (scripts/worker.mjs) claims before spawning research-rank.mjs —
+// works identically whether the request came from localhost or the deployed app.
+export async function requestResearch(id: string): Promise<void> {
   const { error } = await supabaseAdmin()
     .from("candidates")
-    .update({ researching: true })
+    .update({ researching: true, research_requested_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) throw new Error(`markResearching failed: ${error.message}`);
+  if (error) throw new Error(`requestResearch failed: ${error.message}`);
 }
 
 export async function getCandidate(id: string): Promise<Candidate | null> {

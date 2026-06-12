@@ -5,9 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 import { parseNeed } from "@/lib/need-filters";
-import { markResearching } from "@/lib/candidates";
+import { requestResearch } from "@/lib/candidates";
 import { createCampaign, deleteNeed, retryNeed } from "@/lib/needs";
-import { pipelineHostAvailable, spawnCampaignPipeline, spawnResearch } from "@/lib/pipeline/spawn";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { SearchFilters, SwipeDecision } from "@/lib/types";
 
@@ -72,29 +71,21 @@ export async function createCampaignAction(
   if (!text || !hasAnyFilter) {
     return { ok: false, error: "Campaign needs at least one filter." };
   }
-  // Don't create a campaign nothing can run — the scan pipeline (and its
-  // LinkedIn session) lives on the cockpit machine, not on this host.
-  if (!pipelineHostAvailable()) {
-    return {
-      ok: false,
-      error: "Campaigns launch from the cockpit machine — this deployed app is for browsing and swiping.",
-    };
-  }
-
+  // Campaigns are born status='queued' — that row IS the work queue. The
+  // cockpit worker (scripts/worker.mjs, running on the Mac with the LinkedIn
+  // session) claims it and spawns the pipeline, so launching works from any
+  // host, including the deployed app.
   const need = await createCampaign(text, clean, clipPurpose(purpose));
-  spawnCampaignPipeline(need.id);
   revalidatePath("/");
   redirect(`/campaigns/${need.id}`);
 }
 
 export async function researchCandidateAction(formData: FormData): Promise<void> {
   await requireAuth();
-  if (!pipelineHostAvailable()) return; // research runs on the cockpit machine only
   const id = String(formData.get("id") ?? "");
   const needId = String(formData.get("need_id") ?? "");
   if (!id) return;
-  await markResearching(id); // instant "researching…" pulse on the card
-  spawnResearch([id], { force: true });
+  await requestResearch(id); // instant pulse + queue marker; cockpit worker spawns
   if (needId) revalidatePath(`/campaigns/${needId}`);
 }
 
@@ -136,13 +127,12 @@ export async function swipeCandidateFormAction(formData: FormData): Promise<void
 
 export async function retryCampaignAction(formData: FormData): Promise<void> {
   await requireAuth();
-  if (!pipelineHostAvailable()) return; // pipeline runs on the cockpit machine only
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   // Safe to re-run end-to-end: scan upserts ignore duplicates, ranking only
   // touches still-'sourced' people, research skips anyone already researched.
+  // Resetting to 'queued' re-enqueues it; the cockpit worker takes it from there.
   await retryNeed(id);
-  spawnCampaignPipeline(id);
   revalidatePath(`/campaigns/${id}`);
 }
 

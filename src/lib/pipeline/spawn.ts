@@ -45,6 +45,13 @@ export function spawnCampaignPipeline(needId: string): void {
   launch("campaign-pipeline.mjs", ["--need-id", id], `pipeline-${id}`);
 }
 
+// The cockpit dispatcher (scripts/worker.mjs) — executes work queued from any
+// app instance. Auto-started by instrumentation.ts; its pid lock makes
+// repeated spawns (dev-server restarts) harmless no-ops.
+export function spawnWorker(): void {
+  launch("worker.mjs", [], "worker");
+}
+
 export function spawnResearch(ids: string[], opts: { force?: boolean } = {}): void {
   const clean = ids.map(safeId);
   if (!clean.length) return;
