@@ -39,24 +39,22 @@ function ChipList({
 
   return (
     <div>
-      <div className="mb-1 flex items-baseline gap-2">
-        <label className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-          {label}
-        </label>
-        {hint ? <span className="text-[11px] text-zinc-400">{hint}</span> : null}
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <label className="eyebrow">{label}</label>
+        {hint ? <span className="font-mono text-[11px] text-faint">{hint}</span> : null}
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5">
+      <div className="field flex flex-wrap items-center gap-1.5 px-2 py-1.5">
         {values.map((v) => (
           <span
             key={v}
-            className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700"
+            className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 text-xs font-medium text-cyan-200 ring-1 ring-cyan-500/25"
           >
             {v}
             <button
               type="button"
               aria-label={`Remove ${v}`}
               onClick={() => onChange(values.filter((x) => x !== v))}
-              className="text-zinc-400 hover:text-zinc-700"
+              className="text-cyan-300/60 hover:text-cyan-100"
             >
               ×
             </button>
@@ -75,7 +73,7 @@ function ChipList({
           }}
           onBlur={add}
           placeholder={values.length ? "" : placeholder}
-          className="min-w-24 flex-1 bg-transparent py-0.5 text-sm outline-none placeholder:text-zinc-300"
+          className="min-w-24 flex-1 bg-transparent py-0.5 text-sm text-ink outline-none placeholder:text-faint"
         />
       </div>
     </div>
@@ -95,14 +93,12 @@ export default function FilterEditor({
   return (
     <div className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
-          Job title
-        </label>
+        <label className="eyebrow mb-1.5 block">Job title</label>
         <input
           value={value.title}
           onChange={(e) => set("title", e.target.value)}
           placeholder="e.g. CTO"
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none placeholder:text-zinc-300 focus:border-zinc-400"
+          className="field w-full px-3 py-2 text-sm"
         />
       </div>
 
@@ -127,25 +123,21 @@ export default function FilterEditor({
       />
 
       <details className="group">
-        <summary className="cursor-pointer select-none text-xs font-medium text-zinc-400 hover:text-zinc-600">
-          Advanced
+        <summary className="cursor-pointer select-none font-mono text-xs text-faint transition-colors hover:text-muted">
+          + Advanced
         </summary>
         <div className="mt-3 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Keywords
-            </label>
+            <label className="eyebrow mb-1.5 block">Keywords</label>
             <input
               value={value.keywords}
               onChange={(e) => set("keywords", e.target.value)}
               placeholder="residual freetext — matches the whole profile"
-              className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none placeholder:text-zinc-300 focus:border-zinc-400"
+              className="field w-full px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Network
-            </span>
+            <span className="eyebrow mb-1.5 block">Network</span>
             <div className="flex gap-1.5">
               {(Object.keys(NETWORK_LABELS) as ("F" | "S" | "O")[]).map((n) => {
                 const on = value.network.includes(n);
@@ -162,8 +154,8 @@ export default function FilterEditor({
                     }
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       on
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
+                        ? "border-transparent bg-gradient-to-r from-glow to-blue text-[#001417]"
+                        : "border-border-soft bg-surface-2/50 text-muted hover:text-ink"
                     }`}
                   >
                     {NETWORK_LABELS[n]}

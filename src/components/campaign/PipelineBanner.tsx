@@ -16,10 +16,7 @@ function RetryForm({ needId, label }: { needId: string; label: string }) {
   return (
     <form action={retryCampaignAction}>
       <input type="hidden" name="id" value={needId} />
-      <button
-        type="submit"
-        className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-700"
-      >
+      <button type="submit" className="btn btn-primary shrink-0 px-3 py-1.5 text-xs font-semibold">
         {label}
       </button>
     </form>
@@ -36,10 +33,10 @@ export default function PipelineBanner({
 
   if (need.status === "error") {
     return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-rose-800">Pipeline failed</p>
-          <p className="mt-0.5 truncate text-xs text-rose-600" title={need.error ?? undefined}>
+          <p className="text-sm font-medium text-rose-200">Pipeline failed</p>
+          <p className="mt-0.5 truncate text-xs text-rose-300/80" title={need.error ?? undefined}>
             {need.error ?? "Unknown error"}
           </p>
         </div>
@@ -50,12 +47,12 @@ export default function PipelineBanner({
 
   if (stale) {
     return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-amber-800">Pipeline appears stalled</p>
-          <p className="mt-0.5 text-xs text-amber-700">
+          <p className="text-sm font-medium text-amber-200">Pipeline appears stalled</p>
+          <p className="mt-0.5 text-xs text-amber-300/80">
             No heartbeat for 2+ minutes — check{" "}
-            <code className="rounded bg-amber-100 px-1">logs/pipeline-{need.id}.log</code>,
+            <code className="rounded bg-amber-500/15 px-1 font-mono">logs/pipeline-{need.id}.log</code>,
             then retry. Already-found people are kept.
           </p>
         </div>
@@ -74,7 +71,7 @@ export default function PipelineBanner({
   ].filter(Boolean);
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+    <div className="card px-4 py-3">
       <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {STAGES.map((stage, i) => {
           const reached = stage.reached.includes(need.status);
@@ -85,24 +82,24 @@ export default function PipelineBanner({
             (need.status === "done" && stage.key === "done");
           return (
             <li key={stage.key} className="flex items-center gap-2">
-              {i > 0 ? <span className="text-zinc-300">→</span> : null}
+              {i > 0 ? <span className="text-border">→</span> : null}
               <span
                 className={`inline-flex items-center gap-1.5 text-xs font-medium ${
                   isCurrent
                     ? need.status === "done"
-                      ? "text-emerald-700"
-                      : "text-zinc-900"
+                      ? "text-emerald-300"
+                      : "text-ink"
                     : reached
-                      ? "text-emerald-600"
-                      : "text-zinc-400"
+                      ? "text-emerald-400/90"
+                      : "text-faint"
                 }`}
               >
                 {isCurrent && live ? (
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+                  <span className="live-dot h-1.5 w-1.5 rounded-full bg-amber-400" />
                 ) : reached ? (
-                  <span className="text-emerald-500">✓</span>
+                  <span className="text-emerald-400">✓</span>
                 ) : (
-                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-200" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-border" />
                 )}
                 {stage.title}
               </span>
@@ -110,11 +107,11 @@ export default function PipelineBanner({
           );
         })}
         {need.status === "queued" ? (
-          <li className="text-xs font-medium text-amber-600">starting…</li>
+          <li className="font-mono text-xs text-amber-300">starting…</li>
         ) : null}
       </ol>
       {progress.length ? (
-        <p className="mt-1.5 text-xs tabular-nums text-zinc-500">{progress.join(" · ")}</p>
+        <p className="mt-1.5 font-mono text-xs tabular-nums text-muted">{progress.join(" · ")}</p>
       ) : null}
     </div>
   );

@@ -1,95 +1,88 @@
 import Link from "next/link";
+import AppHeader from "@/components/AppHeader";
 import AutoRefresh from "@/components/AutoRefresh";
 import NewCampaign from "@/components/campaign/NewCampaign";
+import RotatingRole from "@/components/RotatingRole";
 import { getNeeds, needIsStale } from "@/lib/needs";
 import { NEED_STATUS_META } from "@/lib/pipeline/labels";
 import { ACTIVE_NEED_STATUSES } from "@/lib/types";
 import { deleteCampaignAction } from "./campaigns/actions";
-import { logout } from "./login/actions";
 
 function when(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-  });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 // The campaign list is live DB state — never prerender it at build time.
 export const dynamic = "force-dynamic";
 
-// Home: type what you're looking for, and re-enter past campaigns.
 export default async function Home() {
   const needs = await getNeeds();
   const anyActive = needs.some((n) => ACTIVE_NEED_STATUSES.includes(n.status));
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
+    <div className="flex min-h-screen flex-col">
       {anyActive ? <AutoRefresh /> : null}
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-base font-semibold">Lost Astronaut</h1>
-            <p className="text-xs text-zinc-500">Find · scan · rank · research</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/candidates"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
-            >
-              All candidates
-            </Link>
-            <form action={logout}>
-              <button
-                type="submit"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
-              >
-                Log out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <AppHeader active="campaigns" />
 
-      <main className="mx-auto max-w-3xl px-6 py-8">
-        <NewCampaign />
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6">
+        {/* ── Hero ───────────────────────────────────────────── */}
+        <section className="pt-20 pb-12 text-center sm:pt-28">
+          <p className="eyebrow animate-fade-up" style={{ animationDelay: "40ms" }}>
+            Lost Astronaut · talent radar
+          </p>
+          <h1
+            className="animate-fade-up mt-5 font-display text-5xl leading-[1.04] tracking-tight text-ink sm:text-6xl"
+            style={{ animationDelay: "120ms" }}
+          >
+            Vibe code your <span className="text-gradient italic">need</span>
+          </h1>
+          <p
+            className="animate-fade-up mt-5 font-mono text-base text-muted sm:text-lg"
+            style={{ animationDelay: "200ms" }}
+          >
+            I want to find <RotatingRole />
+          </p>
 
+          <div
+            className="animate-fade-up mt-9 text-left"
+            style={{ animationDelay: "300ms" }}
+          >
+            <NewCampaign />
+          </div>
+        </section>
+
+        {/* ── Past campaigns ─────────────────────────────────── */}
         {needs.length > 0 ? (
-          <section className="mt-8">
-            <h2 className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Campaigns
-            </h2>
-            <ul className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <section className="animate-fade-up pb-20" style={{ animationDelay: "380ms" }}>
+            <h2 className="eyebrow mb-3">Your campaigns</h2>
+            <ul className="card divide-y divide-border-soft overflow-hidden p-0">
               {needs.map((n) => {
                 const meta = NEED_STATUS_META[n.status];
                 const stale = needIsStale(n);
                 return (
                   <li
                     key={n.id}
-                    className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3 last:border-0 hover:bg-zinc-50"
+                    className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-2/50"
                   >
-                    <Link href={`/campaigns/${n.id}`} className="group min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-zinc-900 group-hover:underline">
+                    <Link href={`/campaigns/${n.id}`} className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-ink group-hover:text-white">
                         {n.need_text}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
-                        <span className="truncate">{n.label}</span>
-                        <span className="text-zinc-300">·</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] text-faint">
+                        <span className="truncate text-muted">{n.label}</span>
+                        <span>·</span>
                         <span className="whitespace-nowrap">
                           {n.counts.found} found
                           {n.counts.ranked ? ` · ${n.counts.ranked} ranked` : ""}
                           {n.counts.researched ? ` · ${n.counts.researched} researched` : ""}
                         </span>
-                        <span className="text-zinc-300">·</span>
+                        <span>·</span>
                         <span className="whitespace-nowrap">{when(n.created_at)}</span>
                       </div>
                     </Link>
-                    <span
-                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        stale ? "bg-rose-100 text-rose-700" : meta.chip
-                      }`}
-                    >
+                    <span className={`chip ${stale ? "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25" : meta.chip}`}>
                       {meta.live && !stale ? (
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+                        <span className="live-dot h-1.5 w-1.5 rounded-full bg-current" />
                       ) : null}
                       {stale ? "Stalled" : meta.label}
                     </span>
@@ -97,8 +90,8 @@ export default async function Home() {
                       <input type="hidden" name="id" value={n.id} />
                       <button
                         type="submit"
-                        title="Delete campaign (its people stay in All candidates)"
-                        className="rounded px-1.5 py-0.5 text-zinc-300 hover:bg-zinc-100 hover:text-zinc-600"
+                        title="Delete campaign (its people stay in Candidates)"
+                        className="rounded-md px-1.5 py-0.5 text-lg leading-none text-faint transition-colors hover:bg-surface-2 hover:text-rose-300"
                       >
                         ×
                       </button>
@@ -108,7 +101,11 @@ export default async function Home() {
               })}
             </ul>
           </section>
-        ) : null}
+        ) : (
+          <p className="animate-fade-up pb-20 text-center font-mono text-xs text-faint" style={{ animationDelay: "380ms" }}>
+            No campaigns yet — describe who you need above to launch your first scan.
+          </p>
+        )}
       </main>
     </div>
   );

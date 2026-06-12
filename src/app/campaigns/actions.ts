@@ -8,7 +8,8 @@ import { needToFilters } from "@/lib/need-filters";
 import { markResearching } from "@/lib/candidates";
 import { createCampaign, deleteNeed, retryNeed } from "@/lib/needs";
 import { spawnCampaignPipeline, spawnResearch } from "@/lib/pipeline/spawn";
-import type { SearchFilters } from "@/lib/types";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import type { SearchFilters, SwipeDecision } from "@/lib/types";
 
 // Per the Next.js data-security guidance: verify auth inside every Server
 // Action — the proxy gate alone doesn't cover direct action invocation.
@@ -83,6 +84,42 @@ export async function researchCandidateAction(formData: FormData): Promise<void>
   await markResearching(id); // instant "researching…" pulse on the card
   spawnResearch([id], { force: true });
   if (needId) revalidatePath(`/campaigns/${needId}`);
+}
+
+const SWIPE_DECISIONS: SwipeDecision[] = ["pending", "approved", "skipped"];
+
+// Ilona's screening swipe: right = approved, left = skipped, "pending" = undo /
+// re-deck. Called directly from the SwipeDeck client component and from the
+// review-board move buttons (via form wrapper below).
+export async function swipeCandidateAction(
+  candidateId: string,
+  decision: SwipeDecision,
+  needId: string | null,
+): Promise<void> {
+  await requireAuth();
+  const id = String(candidateId ?? "");
+  if (!id || !SWIPE_DECISIONS.includes(decision)) return;
+  const { error } = await supabaseAdmin()
+    .from("candidates")
+    .update({ swipe_decision: decision })
+    .eq("id", id);
+  if (error) throw new Error(`swipe failed: ${error.message}`);
+  revalidatePath("/swipe");
+  if (needId) {
+    revalidatePath(`/campaigns/${needId}`);
+    revalidatePath(`/campaigns/${needId}/swipe`);
+    revalidatePath(`/campaigns/${needId}/review`);
+  }
+}
+
+// Form-action wrapper for the review board's move/re-deck buttons.
+export async function swipeCandidateFormAction(formData: FormData): Promise<void> {
+  const decision = String(formData.get("decision") ?? "") as SwipeDecision;
+  await swipeCandidateAction(
+    String(formData.get("id") ?? ""),
+    decision,
+    String(formData.get("need_id") ?? "") || null,
+  );
 }
 
 export async function retryCampaignAction(formData: FormData): Promise<void> {

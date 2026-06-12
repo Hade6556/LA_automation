@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Space_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -7,14 +7,18 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Space Mono — the lostastronaut.space brand face. Carries display headlines,
+// labels, and all technical/mono text, the visual signature of the app.
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
+  weight: ["400", "700"],
+  style: ["normal", "italic"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Lost Astronaut · Candidate Cockpit",
-  description: "Internal candidate pipeline for Lost Astronaut.",
+  title: "Lost Astronaut · vibe-code your need",
+  description: "Describe who you're looking for; we scan, rank, and research them.",
 };
 
 export default function RootLayout({
@@ -25,9 +29,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${spaceMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="relative min-h-full flex flex-col">
+        {/* Cosmic atmosphere: fixed aurora + starfield behind all content. */}
+        <div aria-hidden className="cosmos" />
+        {children}
+      </body>
     </html>
   );
 }

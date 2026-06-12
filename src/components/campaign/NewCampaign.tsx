@@ -41,20 +41,18 @@ export default function NewCampaign() {
 
   if (phase === "review" && filters) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-5">
-        <div className="mb-4 flex items-baseline justify-between gap-3">
+      <div className="card p-5 sm:p-6">
+        <div className="mb-5 flex items-baseline justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">
-              Here&apos;s how I&apos;d search for that
-            </h2>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              “{needText.trim()}” — tweak the filters, then start the campaign.
+            <h2 className="font-display text-xl text-ink">Here&apos;s how I&apos;d search</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              “{needText.trim()}” — tweak the filters, then launch.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setPhase("input")}
-            className="shrink-0 text-xs font-medium text-zinc-400 hover:text-zinc-600"
+            className="shrink-0 font-mono text-xs text-faint transition-colors hover:text-ink"
           >
             ← Back
           </button>
@@ -62,25 +60,22 @@ export default function NewCampaign() {
 
         <FilterEditor value={filters} onChange={setFilters} />
 
-        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-rose-300">{error}</p> : null}
 
         <button
           type="button"
           onClick={start}
           disabled={pending}
-          className="mt-5 w-full rounded-md bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-50"
+          className="btn btn-primary mt-6 w-full py-2.5 text-[0.95rem] font-semibold"
         >
-          {pending ? "Starting…" : "Start campaign"}
+          {pending ? "Launching…" : "Launch campaign →"}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-5">
-      <label htmlFor="need-text" className="mb-2 block text-sm font-semibold text-zinc-900">
-        Who are you looking for?
-      </label>
+    <div className="card group p-2.5 transition-shadow focus-within:shadow-[0_0_60px_-20px_var(--color-cyan)]">
       <textarea
         id="need-text"
         value={needText}
@@ -93,17 +88,19 @@ export default function NewCampaign() {
         }}
         rows={3}
         autoFocus
-        placeholder="e.g. CTO of a fintech in London who has built a product from zero…"
-        className="w-full resize-none rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none placeholder:text-zinc-300 focus:border-zinc-400"
+        placeholder="e.g. CTO of a fintech in Singapore who built a product from zero…"
+        className="w-full resize-none bg-transparent px-3.5 pt-3 pb-2 text-[0.95rem] text-ink outline-none placeholder:text-faint"
       />
-      {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-zinc-400">AI turns this into LinkedIn search filters.</p>
+      {error ? <p className="px-3.5 pb-1 text-sm text-rose-300">{error}</p> : null}
+      <div className="flex items-center justify-between gap-3 px-3.5 pb-1 pt-1">
+        <p className="font-mono text-[11px] text-faint">
+          ⏎ AI turns this into precise LinkedIn filters
+        </p>
         <button
           type="button"
           onClick={suggest}
           disabled={pending || !needText.trim()}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-700 disabled:opacity-50"
+          className="btn btn-primary"
         >
           {pending ? "Thinking…" : "Suggest filters"}
         </button>

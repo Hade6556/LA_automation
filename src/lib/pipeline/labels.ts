@@ -23,16 +23,16 @@ export const STATUS_META: Record<CandidateStatus, string> = {
 
 export function labelClasses(l: Label): string {
   return {
-    green: "bg-green-100 text-green-800",
-    yellow: "bg-amber-100 text-amber-800",
-    red: "bg-red-100 text-red-800",
+    green: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25",
+    yellow: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+    red: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25",
   }[l];
 }
 
 export function statusClasses(s: CandidateStatus): string {
-  if (s === "labeled") return "bg-zinc-900 text-white";
-  if (s === "holding") return "bg-zinc-100 text-zinc-500";
-  return "bg-zinc-100 text-zinc-700";
+  if (s === "labeled") return "bg-gradient-to-r from-glow to-blue text-[#001417]";
+  if (s === "holding") return "bg-surface-2 text-faint ring-1 ring-border-soft";
+  return "bg-surface-2 text-muted ring-1 ring-border-soft";
 }
 
 // Campaign (need) pipeline status, for the home list + campaign page banner.
@@ -41,18 +41,18 @@ export const NEED_STATUS_META: Record<
   NeedStatus,
   { label: string; chip: string; live: boolean }
 > = {
-  new: { label: "Draft", chip: "bg-zinc-100 text-zinc-500", live: false },
-  queued: { label: "Starting…", chip: "bg-amber-100 text-amber-700", live: true },
-  scanning: { label: "Scanning LinkedIn…", chip: "bg-amber-100 text-amber-700", live: true },
-  ranking: { label: "Ranking…", chip: "bg-sky-100 text-sky-700", live: true },
-  researching: { label: "Deep research…", chip: "bg-violet-100 text-violet-700", live: true },
-  done: { label: "Done", chip: "bg-emerald-100 text-emerald-800", live: false },
-  error: { label: "Error", chip: "bg-rose-100 text-rose-700", live: false },
+  new: { label: "Draft", chip: "bg-surface-2 text-faint ring-1 ring-border-soft", live: false },
+  queued: { label: "Starting…", chip: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25", live: true },
+  scanning: { label: "Scanning…", chip: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25", live: true },
+  ranking: { label: "Ranking…", chip: "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/25", live: true },
+  researching: { label: "Researching…", chip: "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/25", live: true },
+  done: { label: "Done", chip: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25", live: false },
+  error: { label: "Error", chip: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25", live: false },
 };
 
 // Cohort-percentile → bar colour for the per-signal bars on the candidate page.
 export function relColor(percentile: number): string {
-  if (percentile >= 0.66) return "bg-emerald-500";
+  if (percentile >= 0.66) return "bg-emerald-400";
   if (percentile >= 0.33) return "bg-amber-400";
   return "bg-rose-400";
 }
@@ -61,8 +61,8 @@ export function relColor(percentile: number): string {
 export function verdictFor(
   score: number | null,
 ): { label: string; chip: string; bar: string } {
-  if (score == null) return { label: "Unscored", chip: "bg-zinc-100 text-zinc-500", bar: "bg-zinc-300" };
-  if (score >= 75) return { label: "Strong fit", chip: "bg-emerald-100 text-emerald-800", bar: "bg-emerald-500" };
-  if (score >= 55) return { label: "Promising", chip: "bg-amber-100 text-amber-800", bar: "bg-amber-500" };
-  return { label: "Weak fit", chip: "bg-rose-100 text-rose-700", bar: "bg-rose-400" };
+  if (score == null) return { label: "Unscored", chip: "bg-surface-2 text-faint ring-1 ring-border-soft", bar: "bg-border" };
+  if (score >= 75) return { label: "Strong fit", chip: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25", bar: "bg-emerald-400" };
+  if (score >= 55) return { label: "Promising", chip: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25", bar: "bg-amber-400" };
+  return { label: "Weak fit", chip: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25", bar: "bg-rose-400" };
 }

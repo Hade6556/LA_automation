@@ -67,6 +67,30 @@ export async function getResearchedCohort(): Promise<
   }[];
 }
 
+// Per-campaign swipe progress for the /swipe picker: how many ranked
+// candidates are still pending, and the YES/NO tallies so far.
+export type SwipeCounts = { pending: number; yes: number; no: number };
+export async function getSwipeCountsByNeed(): Promise<Record<string, SwipeCounts>> {
+  const { data, error } = await supabaseAdmin()
+    .from("candidates")
+    .select("need_id, rank_score, swipe_decision")
+    .not("need_id", "is", null);
+  if (error) throw new Error(`getSwipeCountsByNeed failed: ${error.message}`);
+
+  const byNeed: Record<string, SwipeCounts> = {};
+  for (const r of (data ?? []) as {
+    need_id: string;
+    rank_score: number | null;
+    swipe_decision: string | null;
+  }[]) {
+    const c = (byNeed[r.need_id] ??= { pending: 0, yes: 0, no: 0 });
+    if (r.swipe_decision === "approved") c.yes++;
+    else if (r.swipe_decision === "skipped") c.no++;
+    else if (r.rank_score != null) c.pending++;
+  }
+  return byNeed;
+}
+
 export async function getStatusCounts(): Promise<Record<string, number>> {
   const { data, error } = await supabaseAdmin()
     .from("candidates")

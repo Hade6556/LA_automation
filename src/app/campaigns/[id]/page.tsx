@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import AppHeader from "@/components/AppHeader";
 import AutoRefresh from "@/components/AutoRefresh";
 import CandidateRow from "@/components/campaign/CandidateRow";
 import PipelineBanner from "@/components/campaign/PipelineBanner";
 import { getCandidatesByNeed } from "@/lib/candidates";
 import { getNeed } from "@/lib/needs";
 import { ACTIVE_NEED_STATUSES, type SearchFilters } from "@/lib/types";
-import { logout } from "../../login/actions";
 
 // One campaign: its filters, pipeline progress, and everyone it found —
 // cards appear as people are scraped and fill in as they're scored.
@@ -33,50 +33,44 @@ export default async function CampaignPage({
   const candidates = await getCandidatesByNeed(id);
   const live =
     ACTIVE_NEED_STATUSES.includes(need.status) || need.counts.researching > 0;
+  const pendingSwipes = candidates.filter(
+    (c) => c.rank_score != null && (c.swipe_decision ?? "pending") === "pending",
+  ).length;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900">
+    <div className="flex min-h-screen flex-col">
       <AutoRefresh intervalMs={live ? 3000 : 15000} />
-      <header className="border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+      <AppHeader active="campaigns" back={{ href: "/", label: "Campaigns" }} />
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+        <div className="animate-fade-up mb-6 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <Link href="/" className="text-xs font-medium text-zinc-400 hover:text-zinc-600">
-              ← Campaigns
-            </Link>
-            <h1 className="mt-0.5 truncate text-base font-semibold" title={need.need_text}>
+            <h1 className="font-display text-3xl text-ink" title={need.need_text}>
               {need.need_text}
             </h1>
-            <div className="mt-1 flex flex-wrap gap-1">
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {filterChips(need.filters).map((chip, i) => (
                 <span
                   key={i}
-                  className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-600"
+                  className="chip bg-surface-2/60 text-muted ring-1 ring-border-soft"
                 >
                   {chip}
                 </span>
               ))}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Link
-              href="/candidates"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
-            >
-              All candidates
+          <div className="flex shrink-0 gap-2">
+            {pendingSwipes > 0 ? (
+              <Link href={`/campaigns/${id}/swipe`} className="btn btn-primary text-xs">
+                Swipe {pendingSwipes}
+              </Link>
+            ) : null}
+            <Link href={`/campaigns/${id}/review`} className="btn btn-ghost text-xs">
+              Review board
             </Link>
-            <form action={logout}>
-              <button
-                type="submit"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
-              >
-                Log out
-              </button>
-            </form>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-6">
         <PipelineBanner need={need} />
 
         {candidates.length > 0 ? (
@@ -97,21 +91,21 @@ export default async function CampaignPage({
             {Array.from({ length: 6 }).map((_, i) => (
               <div
                 key={i}
-                className="flex animate-pulse items-center gap-4 rounded-xl border border-zinc-200 bg-white p-3.5"
+                className="card flex animate-pulse items-center gap-4 p-3.5"
                 style={{ animationDelay: `${i * 150}ms` }}
               >
-                <div className="h-5 w-9 rounded bg-zinc-100" />
-                <div className="h-11 w-11 rounded-full bg-zinc-100" />
+                <div className="h-5 w-9 rounded bg-surface-2" />
+                <div className="h-11 w-11 rounded-full bg-surface-2" />
                 <div className="flex-1 space-y-2 py-1">
-                  <div className="h-3 w-1/3 rounded bg-zinc-100" />
-                  <div className="h-2.5 w-2/3 rounded bg-zinc-100" />
+                  <div className="h-3 w-1/3 rounded bg-surface-2" />
+                  <div className="h-2.5 w-2/3 rounded bg-surface-2" />
                 </div>
-                <div className="h-6 w-16 rounded bg-zinc-100" />
+                <div className="h-6 w-16 rounded bg-surface-2" />
               </div>
             ))}
           </div>
         ) : (
-          <p className="mt-10 text-center text-sm text-zinc-400">
+          <p className="mt-12 text-center font-mono text-xs text-faint">
             No candidates found for this campaign.
           </p>
         )}
